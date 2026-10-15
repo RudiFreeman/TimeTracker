@@ -32,6 +32,8 @@ class TimerWindow(QWidget):
         self.main_window = None  # set by main.py
         self.tray = None         # set by main.py when the system tray is available
         self.mini = None         # compact widget shown while minimized
+        self.updater = None      # updater.Updater, set by main.py
+        self.restart_exe = None  # new exe to start after quitting (update_dialog.finish_update)
         self._sessions = {}
         self._list_ids = []
         self._last_active_id = None

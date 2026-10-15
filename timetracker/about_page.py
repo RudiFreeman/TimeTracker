@@ -1,4 +1,4 @@
-"""Страница «О программе»: иконка, название, версия, автор и история версий из CHANGELOG.md."""
+"""Страница «О программе»: иконка, название, версия, автор, обновления и история версий из CHANGELOG.md."""
 import os
 import platform
 import sys
@@ -7,7 +7,7 @@ from PySide6 import __version__ as pyside_version
 from PySide6.QtCore import QSize, Qt
 from PySide6.QtWidgets import QApplication, QHBoxLayout, QLabel, QPushButton, QTextBrowser, QVBoxLayout, QWidget
 
-from . import __version__, theme
+from . import __version__, theme, update_dialog
 
 AUTHOR = "Алексей Рудович"
 DESCRIPTION = ("Портативный трекер рабочего времени для монтажёра и продюсера контента: таймер по продуктам "
@@ -29,8 +29,10 @@ def changelog_markdown():
 
 
 class AboutPage(QWidget):
-    def __init__(self):
+    def __init__(self, timer):
         super().__init__()
+        self.timer = timer
+        self.updater = timer.updater
         layout = QVBoxLayout(self)
         layout.setContentsMargins(28, 24, 28, 14)
         layout.setSpacing(10)
@@ -62,8 +64,16 @@ class AboutPage(QWidget):
         copy = QPushButton("Скопировать версию")
         copy.clicked.connect(lambda: QApplication.clipboard().setText(f"Time Tracker {__version__}"))
         row.addWidget(copy)
+        self.update_btn = QPushButton(objectName="accent")
+        self.update_btn.clicked.connect(self._on_update)
+        row.addWidget(self.update_btn)
+        self.update_status = QLabel(objectName="hint")
+        row.addWidget(self.update_status)
         row.addStretch(1)
         layout.addLayout(row)
+        self.updater.checked.connect(self._show_update)
+        self.updater.prepared.connect(lambda new, error: self._show_update(None, "", error))
+        self._show_update(None, "")
 
         layout.addSpacing(10)
         layout.addWidget(QLabel("Что нового", objectName="section"))
@@ -72,5 +82,37 @@ class AboutPage(QWidget):
         history.document().setDocumentMargin(12)
         layout.addWidget(history, 1)
 
+    def _show_update(self, _release, error, install_error=""):
+        """Button + hint by the result of the last check (the startup one or «Проверить»)."""
+        new = self.updater.update_available()
+        if self.updater.downloading:
+            text, hint = f"Обновить до {new.label}" if new else "Проверить обновления", "Скачиваю обновление…"
+        elif self.updater.checking:
+            text, hint = "Проверить обновления", "Проверяю…"
+        elif new:
+            text, hint = f"Обновить до {new.label}", "Вышла новая версия"
+        elif error:
+            text, hint = "Проверить обновления", f"Не удалось проверить: {error}"
+        elif self.updater.latest:
+            text, hint = "Проверить обновления", "У вас последняя версия"
+        else:
+            text, hint = "Проверить обновления", ""
+        self.update_btn.setText(text)
+        self.update_btn.setObjectName("accent" if new else "")
+        self.update_btn.style().unpolish(self.update_btn)
+        self.update_btn.style().polish(self.update_btn)
+        self.update_btn.setEnabled(not self.updater.busy)
+        if install_error and not self.updater.busy:
+            hint = f"Не получилось обновить: {install_error}"
+        self.update_status.setText(hint)
+
+    def _on_update(self):
+        new = self.updater.update_available()
+        if new:
+            update_dialog.offer(self.window(), self.timer, new)
+        else:
+            self.updater.check()
+            self._show_update(None, "")
+
     def refresh(self):
-        pass
+        self._show_update(None, "")

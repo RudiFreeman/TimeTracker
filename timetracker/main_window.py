@@ -81,7 +81,7 @@ class MainWindow(QWidget):
         layout.addWidget(sidebar)
 
         self.stack = QStackedWidget()
-        self.pages = [JournalPage(database, hub, timer), SummaryPage(database, hub), SettingsPage(database, hub), AboutPage()]
+        self.pages = [JournalPage(database, hub, timer), SummaryPage(database, hub), SettingsPage(database, hub), AboutPage(timer)]
         for page in self.pages:
             if isinstance(page, SettingsPage):
                 # Settings is taller than the default window: scroll instead of squeezing the cards.
