@@ -5,7 +5,7 @@ from datetime import datetime
 from PySide6.QtCore import QEvent, QObject, QPoint, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import (
-    QAbstractItemView, QApplication, QComboBox, QCompleter, QGridLayout, QHBoxLayout, QLabel,
+    QAbstractItemView, QApplication, QComboBox, QGridLayout, QHBoxLayout, QLabel,
     QListWidget, QListWidgetItem, QMenu, QPushButton, QSizePolicy, QVBoxLayout, QWidget,
 )
 
@@ -24,6 +24,39 @@ class Hub(QObject):
     changed = Signal()
 
 
+class PickCombo(QComboBox):
+    """Choose-only field: dimmed, no typing. A plain (non-editable) combo, so Qt itself handles
+    click to open / click again to close / pick to close. Don't intercept its mouse events:
+    an earlier version opened the list on press and the release closed it again."""
+
+    def __init__(self, placeholder):
+        super().__init__(maxVisibleItems=12, objectName="pick")
+        self.setPlaceholderText(placeholder)
+        self.setFocusPolicy(Qt.NoFocus)
+
+    def set_text(self, text):
+        """Select `text` (matched case-insensitively). A name not in the list (renamed, deleted,
+        handed over) clears the field — never add it: «Начать» would quietly recreate it."""
+        key = (text or "").strip().casefold()
+        self.setCurrentIndex(next((i for i in range(self.count()) if self.itemText(i).casefold() == key), -1)
+                             if key else -1)
+
+    def wheelEvent(self, event):
+        event.ignore()  # the wheel must not silently switch the task; let the window scroll instead
+
+    def set_names(self, names):
+        """Replace the list, keeping the current choice. Untouched when nothing changed, so an
+        open list isn't closed by a refresh."""
+        if names == [self.itemText(i) for i in range(self.count())]:
+            return
+        text = self.currentText()
+        self.blockSignals(True)
+        self.clear()
+        self.addItems(names)
+        self.set_text(text)
+        self.blockSignals(False)
+
+
 class TimerWindow(QWidget):
     def __init__(self, database, hub):
         super().__init__()
@@ -37,7 +70,6 @@ class TimerWindow(QWidget):
         self._sessions = {}
         self._list_ids = []
         self._last_active_id = None
-        self._just_completed = False
         self._last_tick = dbm.now()
         self._last_heartbeat = self._last_tick
         self._themed = False
@@ -71,22 +103,24 @@ class TimerWindow(QWidget):
         form.setHorizontalSpacing(6)
         form.setVerticalSpacing(6)
         form.setColumnStretch(1, 1)
-        self.product = self._make_combo("Название продукта")
-        self.subtask = self._make_combo("Тип работы")
-        add = QPushButton(objectName="flat", icon=theme.glyph_icon(theme.G_ADD), toolTip="Создать новую подзадачу")
+        # The fields only pick from what exists (a click opens the list); new names come from «＋ Новая».
+        self.product = self._make_combo("Выберите задачу")
+        self.subtask = self._make_combo("Выберите подзадачу")
+        new_product = QPushButton(" Новая", icon=theme.glyph_icon(theme.G_ADD),
+                                  toolTip="Создать новую задачу (и сразу выбрать подзадачу)")
+        new_product.clicked.connect(self.new_product)
+        add = QPushButton(" Новая", icon=theme.glyph_icon(theme.G_ADD), toolTip="Создать новую подзадачу")
         add.clicked.connect(self.create_subtask)
-        for row, (text, widget) in enumerate((("Продукт", self.product), ("Подзадача", self.subtask))):
+        for row, (text, widget, button) in enumerate((("Задача", self.product, new_product),
+                                                      ("Подзадача", self.subtask, add))):
             form.addWidget(QLabel(text, objectName="secondary"), row, 0)
             form.addWidget(widget, row, 1)
-        form.addWidget(add, 1, 2)
-        new_product = QPushButton(objectName="flat", icon=theme.glyph_icon(theme.G_ADD), toolTip="Новый продукт")
-        new_product.clicked.connect(self.new_product)
-        form.addWidget(new_product, 0, 2)
+            form.addWidget(button, row, 2)
         root.addLayout(form)
 
         self.timer_label = QLabel("00:00:00", objectName="timer", alignment=Qt.AlignCenter)
         tokens = QPushButton(objectName="flat", icon=theme.glyph_icon(theme.G_TOKENS, size=22),
-                             toolTip="Токены: записать расход (ElevenLabs и т.п.) на этот продукт")
+                             toolTip="Токены: записать расход (ElevenLabs и т.п.) на эту задачу")
         tokens.setIconSize(QSize(22, 22))
         tokens.setFixedSize(44, 44)
         tokens.clicked.connect(lambda: self.add_tokens())
@@ -152,40 +186,17 @@ class TimerWindow(QWidget):
         root.addWidget(self.status)
 
     def _make_combo(self, placeholder):
-        combo = QComboBox(editable=True, insertPolicy=QComboBox.NoInsert, maxVisibleItems=12)
-        combo.lineEdit().setPlaceholderText(placeholder)
-        completer = QCompleter(combo.model(), combo)
-        completer.setFilterMode(Qt.MatchContains)
-        completer.setCaseSensitivity(Qt.CaseInsensitive)
-        completer.setCompletionMode(QCompleter.PopupCompletion)
-        completer.popup().setObjectName("completer")
-        completer.activated.connect(self._mark_completed)
-        combo.setCompleter(completer)
-        combo.lineEdit().returnPressed.connect(self._on_return)
-        combo.editTextChanged.connect(lambda _: self._update_timer())  # main button follows the fields
+        combo = PickCombo(placeholder)
+        combo.currentTextChanged.connect(lambda _: self._update_timer())  # main button follows the fields
         return combo
-
-    def _mark_completed(self, *_):
-        # Enter that picks a suggestion must not also start the timer.
-        self._just_completed = True
-        QTimer.singleShot(0, lambda: setattr(self, "_just_completed", False))
-
-    def _on_return(self):
-        if not self._just_completed:
-            self.play()
 
     @staticmethod
     def _fill(combo, names):
-        text = combo.currentText()
-        combo.blockSignals(True)
-        combo.clear()
-        combo.addItems(names)
-        combo.setEditText(text)
-        combo.blockSignals(False)
+        combo.set_names(names)
 
     @staticmethod
     def _set_text(combo, text):
-        combo.setEditText(text)
+        combo.set_text(text)
 
     # ---------------------------------------------------------------- actions
 
@@ -193,20 +204,15 @@ class TimerWindow(QWidget):
         product = self.product.currentText().strip()
         subtask = self.subtask.currentText().strip() or dbm.DEFAULT_SUBTASK
         if not product:
-            self._flash("Введите название продукта.", warn=True)
-            self.product.setFocus()
+            self._flash("Выберите задачу или создайте новую.", warn=True)
             return
 
-        subtask_id = self.db.find_subtask(subtask)
-        if subtask_id is None:
-            if not dialogs.ask(self, "Новая подзадача", f"Подзадачи «{subtask}» нет в списке.\nСоздать её?"):
-                return
-            subtask_id = self.db.create_subtask(subtask)
+        subtask_id = self.db.create_subtask(subtask)  # the fields only hold existing names; get-or-create
 
         product_id = self.db.find_product(product)
         active = self.db.active_session()
         if active and active["product_id"] == product_id and active["subtask_id"] == subtask_id:
-            self._flash("Эта задача уже идёт.")
+            self._flash("Эта подзадача уже идёт.")
             return
         after_hours = self._confirm_after_hours()
         if after_hours is None:
@@ -262,7 +268,7 @@ class TimerWindow(QWidget):
             target = self._stop_target()
             session_id = target["id"] if target else None
         if session_id is None:
-            self._flash("Нечего завершать: запустите задачу или выберите её в списке.")
+            self._flash("Нечего завершать: запустите подзадачу или выберите её в списке.")
             return
         info = self._sessions.get(session_id)
         self.db.stop(session_id)
@@ -277,15 +283,20 @@ class TimerWindow(QWidget):
         if not dlg.exec():
             return
         name, subtask = dlg.values()
+        subtask = subtask or dbm.DEFAULT_SUBTASK
+        # Create first: the fields only pick names that exist (PickCombo.set_text).
+        is_new = self.db.find_product(name) is None
+        product_id = self.db.get_or_create_product(name)
+        if product_id in self.db.archived_ids():  # picked a handed-over one — it's back in work
+            self.db.set_archived(product_id, False)
+        self.db.create_subtask(subtask)
+        self.hub.changed.emit()
         self._set_text(self.product, name)
-        self._set_text(self.subtask, subtask or dbm.DEFAULT_SUBTASK)
+        self._set_text(self.subtask, subtask)
         if dlg.start:
             self.play()
-            return
-        if self.db.find_product(name) is None:
-            self.db.get_or_create_product(name)
-            self.hub.changed.emit()
-            self._flash(f"Продукт «{name}» создан.")
+        elif is_new:
+            self._flash(f"Задача «{name}» создана.")
 
     def create_subtask(self):
         name = dialogs.ask_text(self, "Новая подзадача", "Название подзадачи:")
@@ -293,7 +304,7 @@ class TimerWindow(QWidget):
             return
         self.db.create_subtask(name)
         self.hub.changed.emit()
-        self.subtask.setEditText(name)
+        self._set_text(self.subtask, name)
         self._flash(f"Подзадача «{name}» добавлена.")
 
     def add_tokens(self, parent=None):
@@ -315,13 +326,13 @@ class TimerWindow(QWidget):
         product, model, tokens = dlg.values()
         product_id = self.db.find_product(product)
         if product_id is None:
-            if not dialogs.ask(parent, "Новый продукт", f"Продукта «{product}» ещё нет.\nСоздать его?"):
+            if not dialogs.ask(parent, "Новая задача", f"Задачи «{product}» ещё нет.\nСоздать её?"):
                 return None
             product_id = self.db.get_or_create_product(product)
         self.db.add_tokens(product_id, model, tokens)
         self.hub.changed.emit()
         self._flash(f"+{theme.fmt_tokens(tokens)} токенов ({model}) → {product}. "
-                    f"Всего по продукту: {theme.fmt_tokens(self.db.product_tokens(product_id))}")
+                    f"Всего по задаче: {theme.fmt_tokens(self.db.product_tokens(product_id))}")
         return f"+{theme.fmt_tokens(tokens)} токенов → {product}"
 
     def _confirm_after_hours(self):
@@ -375,12 +386,12 @@ class TimerWindow(QWidget):
                            lambda: self._continue(s))
         if s.get("status", "stopped") != "stopped":
             menu.addAction(theme.glyph_icon(theme.G_STOP), "Завершить сессию", lambda: self.stop(s["id"]))
-        menu.addAction(theme.glyph_icon(theme.G_CHECK), "Сдать продукт",
+        menu.addAction(theme.glyph_icon(theme.G_CHECK), "Сдать задачу",
                        lambda: self.archive_product(s["product_id"], s["product"]))
         menu.addSeparator()
-        menu.addAction(theme.glyph_icon(theme.G_CHART), "Сводка по продукту",
+        menu.addAction(theme.glyph_icon(theme.G_CHART), "Сводка по задаче",
                        lambda: self.main_window.show_product(1, s["product"]))
-        menu.addAction(theme.glyph_icon(theme.G_CLOCK), "Журнал по продукту",
+        menu.addAction(theme.glyph_icon(theme.G_CLOCK), "Журнал по задаче",
                        lambda: self.main_window.show_product(0, s["product"]))
         menu.exec(self.list.viewport().mapToGlobal(pos))
 
@@ -394,7 +405,7 @@ class TimerWindow(QWidget):
         self.db.set_archived(product_id, True)
         if self.product.currentText().strip().casefold() == name.casefold():
             self._set_text(self.product, "")
-        self._flash(f"«{name}» сдан.")
+        self._flash(f"«{name}» сдана.")
         self.hub.changed.emit()
 
     # ------------------------------------------------------------- refresh
@@ -404,7 +415,7 @@ class TimerWindow(QWidget):
         self._fill(self.product, self.db.product_names())
         self._fill(self.subtask, self.db.subtask_names())
         if not self.subtask.currentText():
-            self.subtask.setEditText(dbm.DEFAULT_SUBTASK)
+            self._set_text(self.subtask, dbm.DEFAULT_SUBTASK)
         self.refresh()
 
     def refresh(self):
@@ -438,15 +449,16 @@ class TimerWindow(QWidget):
             for i, row in enumerate(rows):
                 self.list.item(i).setData(DATA, Box(row))
         groups = len(rows) - len(sessions)
-        self.list_title.setText(f"Продуктов: {groups}  ·  задач: {len(sessions)}  ·  двойной клик — продолжить"
+        self.list_title.setText(f"Задач: {groups}  ·  подзадач: {len(sessions)}  ·  двойной клик — продолжить"
                                 if sessions else "Нет задач в работе")
 
         active = next((s for s in sessions if s["status"] == "active"), None)
-        active_id = active["id"] if active else None
-        if active and active_id != self._last_active_id:
+        # Names too, not only the id: a running task renamed in Summary must show its new name.
+        active_key = (active["id"], active["product"], active["subtask"]) if active else None
+        if active and active_key != self._last_active_id:
             self._set_text(self.product, active["product"])
             self._set_text(self.subtask, active["subtask"])
-        self._last_active_id = active_id
+        self._last_active_id = active_key
 
         today = datetime.combine(at.date(), datetime.min.time())
         self.today.setText(f"Сегодня: {theme.fmt_human(self.db.total_between(today, at, at))}")
@@ -532,13 +544,13 @@ class TimerWindow(QWidget):
                     else "Возобновить" if mode == "restart" else "Начать")
             glyph, style = theme.G_PLAY, "play"
             if mode == "empty":
-                hint = "Введите продукт, чтобы начать."
+                hint = "Выберите задачу или создайте новую, чтобы начать."
             elif mode == "resume":
                 hint = f"Продолжит сессию на паузе (уже {theme.fmt_human(target['total'])})."
             elif mode == "restart":
-                hint = "Задача завершена — начнётся новая сессия. Готово? «Сдать» уберёт продукт из списка."
+                hint = "Подзадача завершена — начнётся новая сессия. Готово? «Сдать» уберёт задачу из списка."
             elif self.db.find_product(self.product.currentText()) is None:
-                hint = "Новый продукт — начнётся новая сессия."
+                hint = "Новая задача — начнётся новая сессия."
             else:
                 hint = "Начнётся новая сессия."
             if switching:

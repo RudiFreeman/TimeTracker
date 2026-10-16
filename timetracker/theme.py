@@ -147,6 +147,8 @@ QLineEdit, QComboBox, QTimeEdit, QDateEdit {{
 }}
 QLineEdit:hover, QComboBox:hover, QTimeEdit:hover, QDateEdit:hover {{ background: {CARD_HOVER}; }}
 QLineEdit:focus, QComboBox:focus, QTimeEdit:focus, QDateEdit:focus {{ background: #1f1f1f; border-bottom: 2px solid {ACCENT}; }}
+QComboBox#pick {{ background: {ROW}; border: 1px solid {BORDER}; color: {TEXT_2}; combobox-popup: 0; }}
+QComboBox#pick:hover {{ background: {CARD}; }}
 QComboBox::drop-down {{ border: none; width: 26px; }}
 QComboBox::down-arrow {{ image: url({a}/down.png); width: 10px; height: 10px; }}
 QComboBox QAbstractItemView, QListView#completer {{

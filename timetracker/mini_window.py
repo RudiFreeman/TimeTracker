@@ -60,7 +60,7 @@ class MiniWindow(QWidget):
         expand.setFixedSize(30, 30)
         expand.clicked.connect(self.expand)
         layout.addWidget(self.main_btn)
-        tokens = HoverButton(theme.G_TOKENS, "Токены: записать расход на этот продукт")
+        tokens = HoverButton(theme.G_TOKENS, "Токены: записать расход на эту задачу")
         tokens.setFixedSize(30, 30)
         tokens.clicked.connect(self._add_tokens)
         layout.addWidget(tokens)

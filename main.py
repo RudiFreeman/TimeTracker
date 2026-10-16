@@ -5,6 +5,7 @@ import sqlite3
 import sys
 import time
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication, QSystemTrayIcon
 
 from timetracker import dialogs, theme, update_dialog, updater
@@ -63,6 +64,9 @@ def main():
         return run_replacer(sys.argv[sys.argv.index(updater.REPLACE_FLAG) + 1])
     app = QApplication(sys.argv)
     app.setApplicationName(APP_TITLE)
+    # Windows' "slide open" combo animation leaves one frame with no list at all (the big timer
+    # shows through) between the animation and the real popup.
+    app.setEffectEnabled(Qt.UI_AnimateCombo, False)
     app.setStyle("Fusion")
     app.setPalette(theme.palette())
     app.setStyleSheet(theme.stylesheet())

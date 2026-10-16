@@ -10,8 +10,8 @@ from PySide6.QtWidgets import QApplication, QHBoxLayout, QLabel, QPushButton, QT
 from . import __version__, theme, update_dialog
 
 AUTHOR = "Алексей Рудович"
-DESCRIPTION = ("Портативный трекер рабочего времени для монтажёра и продюсера контента: таймер по продуктам "
-               "и подзадачам, журнал по дням, сводка по продуктам и учёт токенов AI-сервисов.")
+DESCRIPTION = ("Портативный трекер рабочего времени для монтажёра и продюсера контента: таймер по задачам "
+               "и подзадачам, журнал по дням, сводка по задачам и учёт токенов AI-сервисов.")
 # CHANGELOG.md лежит в корне проекта; в exe build.bat кладёт его в корень сборки — путь тот же.
 CHANGELOG = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "CHANGELOG.md")
 

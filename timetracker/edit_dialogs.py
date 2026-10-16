@@ -21,7 +21,7 @@ def resolve_names(parent, database, product, subtask):
     """Product/subtask ids for the typed names, offering to create missing ones; None if cancelled."""
     product_id = database.find_product(product)
     if product_id is None:
-        if not ask(parent, "Новый продукт", f"Продукта «{product}» ещё нет.\nСоздать его?"):
+        if not ask(parent, "Новая задача", f"Задачи «{product}» ещё нет.\nСоздать её?"):
             return None
         product_id = database.get_or_create_product(product)
     subtask_id = database.find_subtask(subtask)
@@ -144,9 +144,9 @@ class EditEntryDialog(_Form):
         info = database.session_info(session_id)
         self.days = database.session_days(session_id)
 
-        self.product = suggest_combo(database.product_names(), info["product"], "Название продукта")
+        self.product = suggest_combo(database.product_names(), info["product"], "Название задачи")
         self.subtask = suggest_combo(database.subtask_names(), info["subtask"], "Тип работы")
-        self.add_field(0, "Продукт", self.product)
+        self.add_field(0, "Задача", self.product)
         self.add_field(1, "Подзадача", self.subtask)
         self.move_note = QLabel(objectName="hint", wordWrap=True)
         self.move_note.hide()
@@ -211,13 +211,13 @@ class EditEntryDialog(_Form):
         names = (self.product.currentText().strip().casefold(), self.subtask.currentText().strip().casefold())
         moving = names != self._orig_names and self.days > 1
         self.move_note.setVisible(moving)
-        self.move_note.setText(f"Сессия идёт {self.days} дн. — на другую задачу она перенесётся целиком, "
+        self.move_note.setText(f"Сессия идёт {self.days} дн. — при переносе она перенесётся целиком, "
                                f"со всеми днями." if moving else "")
 
     def _save(self):
         product, subtask = self.product.currentText().strip(), self.subtask.currentText().strip()
         if not product or not subtask:
-            return self.fail("Укажите продукт и подзадачу.")
+            return self.fail("Укажите задачу и подзадачу.")
         spans = []
         for row in self.rows:
             start, end = row.values()
@@ -266,12 +266,12 @@ class ManualTimeDialog(_Form):
         span.addWidget(self.end)
         self.duration = QLabel(objectName="secondary")
         span.addWidget(self.duration, 1)
-        self.product = suggest_combo(database.product_names(), product, "Название продукта")
+        self.product = suggest_combo(database.product_names(), product, "Название задачи")
         self.subtask = suggest_combo(database.subtask_names(), subtask or dbm.DEFAULT_SUBTASK, "Тип работы")
         self.add_field(0, "Дата", self.date)
         self.form.addWidget(QLabel("Время", objectName="secondary"), 1, 0)
         self.form.addLayout(span, 1, 1)
-        self.add_field(2, "Продукт", self.product)
+        self.add_field(2, "Задача", self.product)
         self.add_field(3, "Подзадача", self.subtask)
         for edit in (self.start, self.end):
             edit.timeChanged.connect(self._update_duration)
@@ -298,7 +298,7 @@ class ManualTimeDialog(_Form):
         start, end = self.span()
         product, subtask = self.product.currentText().strip(), self.subtask.currentText().strip()
         if not product or not subtask:
-            return self.fail("Укажите продукт и подзадачу.")
+            return self.fail("Укажите задачу и подзадачу.")
         if end <= start:
             return self.fail("Конец должен быть позже начала.")
         if end > dbm.now():

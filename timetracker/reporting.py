@@ -123,7 +123,7 @@ def build_days(rows):
 def write_csv(path, rows):
     with open(path, "w", newline="", encoding="utf-8-sig") as f:
         writer = csv.writer(f, delimiter=";")
-        writer.writerow(["Продукт", "Подзадача", "Сессия", "Дата", "Начало", "Конец", "Длительность", "Часы"])
+        writer.writerow(["Задача", "Подзадача", "Сессия", "Дата", "Начало", "Конец", "Длительность", "Часы"])
         for row in rows:
             start, end = dbm.from_ts(row["start"]), dbm.from_ts(row["end"])
             seconds = _seconds(start, end)

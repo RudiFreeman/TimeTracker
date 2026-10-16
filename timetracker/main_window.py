@@ -42,7 +42,7 @@ def period_combo(default):
 
 
 def search_field():
-    field = QLineEdit(placeholderText="Поиск по продукту или подзадаче", clearButtonEnabled=True)
+    field = QLineEdit(placeholderText="Поиск по задаче или подзадаче", clearButtonEnabled=True)
     field.addAction(theme.glyph_icon(theme.G_SEARCH, theme.TEXT_3), QLineEdit.LeadingPosition)
     field.setMinimumWidth(180)
     field.setMaximumWidth(320)
@@ -71,7 +71,7 @@ class MainWindow(QWidget):
         side.addSpacing(8)
         self.nav = QListWidget(objectName="nav")
         self.nav.setIconSize(QSize(16, 16))
-        for glyph, text in ((theme.G_CLOCK, "Журнал"), (theme.G_CHART, "Сводка по продуктам"), (theme.G_SETTINGS, "Настройки"),
+        for glyph, text in ((theme.G_CLOCK, "Журнал"), (theme.G_CHART, "Сводка по задачам"), (theme.G_SETTINGS, "Настройки"),
                             (theme.G_INFO, "О программе")):
             self.nav.addItem(QListWidgetItem(theme.glyph_icon(glyph), "  " + text))
         side.addWidget(self.nav, 1)
@@ -254,7 +254,7 @@ class JournalPage(QWidget):
         menu.addAction(theme.glyph_icon(theme.G_EDIT), "Изменить…", lambda: self._edit(entry, data["day"]))
         menu.addSeparator()
         if entry["status"] != "active":
-            menu.addAction(theme.glyph_icon(theme.G_PLAY), "Продолжить эту задачу", lambda: self._continue(entry))
+            menu.addAction(theme.glyph_icon(theme.G_PLAY), "Продолжить", lambda: self._continue(entry))
         else:
             menu.addAction(theme.glyph_icon(theme.G_PAUSE), "Пауза", self.timer.pause)
         if entry["status"] != "stopped":
@@ -265,7 +265,7 @@ class JournalPage(QWidget):
 
     def _edit(self, entry, day):
         if entry["status"] == "active":
-            dialogs.error(self, "Изменить запись", "Эта задача сейчас идёт.\nПоставьте её на паузу, затем измените.")
+            dialogs.error(self, "Изменить запись", "Эта запись сейчас идёт.\nПоставьте её на паузу, затем измените.")
             return
         if edit_dialogs.EditEntryDialog(self, self.db, entry["session_id"], day).exec():
             self.hub.changed.emit()
@@ -327,7 +327,7 @@ class SummaryTree(QTreeWidget):
 
 
 class SummaryPage(QWidget):
-    COLUMNS = ["Продукт / подзадача / сессия", "Время", "Часы", "Минуты", "Сессий", "Токены", "Последняя работа"]
+    COLUMNS = ["Задача / подзадача / сессия", "Время", "Часы", "Минуты", "Сессий", "Токены", "Последняя работа"]
     TOKENS_COL = 5
 
     def __init__(self, database, hub):
@@ -337,7 +337,7 @@ class SummaryPage(QWidget):
         self._rows = []
         self._token_rows = []
         self._archived = set()
-        layout = page_layout(self, "Сводка по продуктам")
+        layout = page_layout(self, "Сводка по задачам")
 
         bar = QHBoxLayout()
         self.period = period_combo(reporting.ALL_TIME)
@@ -377,7 +377,7 @@ class SummaryPage(QWidget):
         footer = QHBoxLayout()
         self.total = QLabel(objectName="secondary")
         footer.addWidget(self.total, 1)
-        self.archive_btn = QPushButton(" Сдан", icon=theme.glyph_icon(theme.G_CHECK))
+        self.archive_btn = QPushButton(" Сдана", icon=theme.glyph_icon(theme.G_CHECK))
         self.archive_btn.clicked.connect(self._toggle_selected_archive)
         footer.addWidget(self.archive_btn)
         footer.addSpacing(8)
@@ -461,7 +461,7 @@ class SummaryPage(QWidget):
                 bold=True, meta=("product", product_id, product["name"]), icon=theme.dot_icon(theme.product_color(product_id)),
             )
             if product_id in self._archived:
-                p_item.setText(0, f"{product['name']}  ·  сдан")
+                p_item.setText(0, f"{product['name']}  ·  сдана")
                 for col in range(self.tree.columnCount()):
                     p_item.setForeground(col, theme_color(theme.TEXT_3))
             for subtask_id, subtask in sorted(product["subtasks"].items(), key=lambda kv: -kv[1]["total"]):
@@ -500,7 +500,7 @@ class SummaryPage(QWidget):
         self.tree.setUpdatesEnabled(True)
         self.tree.verticalScrollBar().setValue(scroll)
         text = (f"Итого: {theme.fmt_human(grand)}  ·  {reporting.hours(grand)} ч  ·  {reporting.minutes(grand)} мин"
-                f"  ·  продуктов: {len(products)}")
+                f"  ·  задач: {len(products)}")
         if grand_tokens:
             text += f"  ·  токенов: {theme.fmt_tokens(grand_tokens)}"
         self.total.setText(text)
@@ -546,11 +546,11 @@ class SummaryPage(QWidget):
                 menu.addAction(theme.glyph_icon(theme.G_PLAY), "Вернуть в работу",
                                lambda: self._set_archived(item_id, name, False))
             else:
-                menu.addAction(theme.glyph_icon(theme.G_CHECK), "Отметить как сданный",
+                menu.addAction(theme.glyph_icon(theme.G_CHECK), "Отметить как сданную",
                                lambda: self._set_archived(item_id, name, True))
-            menu.addAction("Переименовать продукт…", lambda: self._rename(item_id, name))
+            menu.addAction("Переименовать задачу…", lambda: self._rename(item_id, name))
             menu.addSeparator()
-            menu.addAction(theme.glyph_icon(theme.G_DELETE), "Удалить продукт со всеми сессиями…",
+            menu.addAction(theme.glyph_icon(theme.G_DELETE), "Удалить задачу со всеми сессиями…",
                            lambda: self._delete_product(item_id, name))
         elif kind == "tokens":
             menu.addAction(theme.glyph_icon(theme.G_DELETE), "Удалить запись о токенах…",
@@ -560,14 +560,14 @@ class SummaryPage(QWidget):
         menu.exec(self.tree.viewport().mapToGlobal(pos))
 
     def _rename(self, product_id, name):
-        new_name = dialogs.ask_text(self, "Переименовать", "Новое название продукта:", name)
+        new_name = dialogs.ask_text(self, "Переименовать", "Новое название задачи:", name)
         if not new_name or new_name == name:
             return
         try:
             self.db.rename_product(product_id, new_name)
         except ValueError:
-            if not dialogs.ask(self, "Объединить продукты",
-                               f"Продукт «{new_name}» уже существует.\nПеренести в него все сессии «{name}»?"):
+            if not dialogs.ask(self, "Объединить задачи",
+                               f"Задача «{new_name}» уже существует.\nПеренести в неё все сессии «{name}»?"):
                 return
             self.db.merge_products(product_id, self.db.find_product(new_name))
         self.hub.changed.emit()
@@ -584,9 +584,9 @@ class SummaryPage(QWidget):
         product = self._selected_product()
         self.archive_btn.setEnabled(product is not None)
         archived = product is not None and product[0] in self._archived
-        self.archive_btn.setText(" Вернуть в работу" if archived else " Сдан")
+        self.archive_btn.setText(" Вернуть в работу" if archived else " Сдана")
         self.archive_btn.setIcon(theme.glyph_icon(theme.G_PLAY if archived else theme.G_CHECK))
-        self.archive_btn.setToolTip(f"«{product[1]}»" if product else "Выберите продукт в списке")
+        self.archive_btn.setToolTip(f"«{product[1]}»" if product else "Выберите задачу в списке")
 
     def _toggle_selected_archive(self):
         product = self._selected_product()
@@ -600,7 +600,7 @@ class SummaryPage(QWidget):
         self.hub.changed.emit()
 
     def _delete_product(self, product_id, name):
-        if dialogs.ask(self, "Удалить продукт", f"Удалить «{name}», все его сессии и записи токенов?\n"
+        if dialogs.ask(self, "Удалить задачу", f"Удалить «{name}», все её сессии и записи токенов?\n"
                        "Это нельзя отменить.", warning=True):
             self.db.delete_product(product_id)
             self.hub.changed.emit()

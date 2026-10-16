@@ -63,10 +63,10 @@ def ask_text(parent, title, label, initial=""):
 
 def confirm_archive(parent, name, open_count):
     """Ask before marking a product finished («сдан»)."""
-    text = f"Сдать «{name}»?\nОн уйдёт из списка и подсказок, но останется в Сводке и Журнале."
+    text = f"Сдать «{name}»?\nОна уйдёт из списка и подсказок, но останется в Сводке и Журнале."
     if open_count:
         text += f"\n\nНезавершённые сессии ({open_count}) будут завершены."
-    return ask(parent, "Продукт сдан", text)
+    return ask(parent, "Задача сдана", text)
 
 
 def suggest_combo(names, text, placeholder):
@@ -92,7 +92,7 @@ class NewProductDialog(QDialog):
         self._existing = {name.casefold(): name for name in products}
         self._just_completed = False
         self.start = False
-        self.setWindowTitle("Новый продукт")
+        self.setWindowTitle("Новая задача")
         self.setMinimumWidth(380)
         root = QVBoxLayout(self)
         root.setContentsMargins(16, 14, 16, 12)
@@ -102,7 +102,7 @@ class NewProductDialog(QDialog):
         form.setHorizontalSpacing(8)
         form.setVerticalSpacing(6)
         form.setColumnStretch(1, 1)
-        self.name = QLineEdit(placeholderText="Название нового продукта")
+        self.name = QLineEdit(placeholderText="Название новой задачи")
         self.name.textChanged.connect(self._check)
         self.subtask = suggest_combo(subtasks, subtask, "Тип работы")
         self.subtask.completer().activated.connect(self._mark_completed)
@@ -142,7 +142,7 @@ class NewProductDialog(QDialog):
     def _check(self):
         existing = self._existing_name()
         self.note.setVisible(bool(existing))
-        self.note.setText(f"Продукт «{existing}» уже есть — он будет выбран, новый не создаётся." if existing else "")
+        self.note.setText(f"Задача «{existing}» уже есть — она будет выбрана, новая не создаётся." if existing else "")
         self.start_btn.setText("Выбрать и начать" if existing else "Создать и начать")
         self.create_btn.setText("Выбрать" if existing else "Создать")
 
@@ -159,7 +159,7 @@ class NewProductDialog(QDialog):
 
     def _done(self, start):
         if not self.name.text().strip():
-            self.note.setText("Введите название продукта.")
+            self.note.setText("Введите название задачи.")
             self.note.show()
             self.name.setFocus()
             return
@@ -189,11 +189,11 @@ class TokenDialog(QDialog):
         form.setHorizontalSpacing(8)
         form.setVerticalSpacing(6)
         form.setColumnStretch(1, 1)
-        self.product = suggest_combo(products, product, "Название продукта")
+        self.product = suggest_combo(products, product, "Название задачи")
         self.model = suggest_combo(models, model, "Например, ElevenLabs Multilingual v2")
         self.tokens = QLineEdit(placeholderText="Сколько токенов израсходовано")
         self.tokens.setValidator(QRegularExpressionValidator(QRegularExpression(r"[\d\s]{0,15}"), self.tokens))
-        for row, (text, widget) in enumerate((("Продукт", self.product), ("Модель", self.model), ("Токены", self.tokens))):
+        for row, (text, widget) in enumerate((("Задача", self.product), ("Модель", self.model), ("Токены", self.tokens))):
             form.addWidget(QLabel(text, objectName="secondary"), row, 0)
             form.addWidget(widget, row, 1)
         root.addLayout(form)
@@ -265,7 +265,7 @@ class TokenDialog(QDialog):
             self.records.addTopLevelItem(item)
         self.records.setVisible(bool(rows))
         if not product:
-            self.history_title.setText("Укажите продукт, чтобы увидеть уже добавленные токены.")
+            self.history_title.setText("Укажите задачу, чтобы увидеть уже добавленные токены.")
         elif not rows:
             self.history_title.setText(f"К «{product}» токены ещё не добавлялись.")
         else:
@@ -302,7 +302,7 @@ class TokenDialog(QDialog):
 
     def _save(self):
         product, model, tokens = self.values()
-        for ok, text, widget in ((product, "Укажите продукт.", self.product),
+        for ok, text, widget in ((product, "Укажите задачу.", self.product),
                                  (model, "Укажите модель.", self.model),
                                  (tokens > 0, "Введите количество токенов.", self.tokens)):
             if not ok:
