@@ -80,6 +80,6 @@ python main.py
 ## 📄 Лицензия
 
 [MIT](LICENSE) — программу можно бесплатно использовать, менять и распространять с указанием автора.
-В сборку входят Qt / PySide6 (LGPL v3), Python (PSF License) и SQLite (public domain) — подробнее в [LICENSE](LICENSE).
+В сборку входят Qt / PySide6 (LGPL v3), Python (PSF License) и SQLite (public domain) — подробнее в [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 Автор — Алексей Рудович.

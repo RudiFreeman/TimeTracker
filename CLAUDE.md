@@ -32,7 +32,7 @@
 ## Структура
 | Файл | Что внутри |
 |---|---|
-| [LICENSE](LICENSE) | MIT (автор — Aleksei Rudovich) + сторонние компоненты в сборке: Qt/PySide6 — LGPL v3, Python — PSF, SQLite — public domain. При добавлении библиотек в сборку дописывать сюда |
+| [LICENSE](LICENSE) | Чистый текст MIT (автор — Aleksei Rudovich): ничего не дописывать, иначе GitHub не распознаёт лицензию и значок в README пишет NOASSERTION. [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) — сторонние компоненты в сборке: Qt/PySide6 — LGPL v3, Python — PSF, SQLite — public domain. При добавлении библиотек в сборку дописывать сюда |
 | [main.py](main.py) | Точка входа: QApplication, Fusion + тёмная палитра + QSS, mutex, создание окон; режим `--replace` (замена exe при обновлении, без UI) |
 | [timetracker/db.py](timetracker/db.py) | Вся работа с SQLite и бизнес-логика таймера (start/resume/pause/stop, авто-пауза, recover, отчётные запросы). Без UI |
 | [timetracker/reporting.py](timetracker/reporting.py) | Периоды, агрегация для сводки, разбивка по дням для журнала, CSV. Без UI |

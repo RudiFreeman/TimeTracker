@@ -24,4 +24,7 @@ def test_license_file_exists():
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     with open(os.path.join(root, "LICENSE"), encoding="utf-8") as f:
         text = f.read()
-    assert text.startswith("MIT License") and "LGPL" in text
+    # Только текст MIT: с приписками GitHub не распознаёт лицензию (значок в README — NOASSERTION).
+    assert text.startswith("MIT License") and text.rstrip().endswith("SOFTWARE.")
+    with open(os.path.join(root, "THIRD_PARTY_NOTICES.md"), encoding="utf-8") as f:
+        assert "LGPL" in f.read()
