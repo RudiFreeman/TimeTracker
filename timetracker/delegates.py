@@ -181,14 +181,14 @@ class EntryDelegate(QStyledItemDelegate):
             finished = s["status"] == "stopped"
             rect = option.rect.adjusted(GROUP_INDENT, 1, 0, -1)
             paint_entry(p, rect, option.font, theme.product_color(s["product_id"]),
-                        s["subtask"], None, "✓ завершено" if finished else fmt_duration(s["total"]),
+                        s["subtask"], None, ("✓ " if finished else "") + fmt_duration(s["pair_total"]),
                         hover=bool(option.state & QStyle.State_MouseOver), active=s["status"] == "active",
                         selected=bool(option.state & QStyle.State_Selected), muted=finished, title_bold=False)
         p.restore()
 
     @staticmethod
     def _paint_group(p, option, g):
-        """Product name once, its tokens and the time of its open subtasks on the right."""
+        """Product name once, its tokens and all the time of its subtasks on the right."""
         rect = option.rect.adjusted(0, 0 if g["first"] else GROUP_GAP, 0, 0)
         if option.state & QStyle.State_MouseOver:
             p.setPen(Qt.NoPen)
@@ -200,7 +200,7 @@ class EntryDelegate(QStyledItemDelegate):
         p.drawEllipse(QRectF(rect.left() + 5, rect.center().y() - 3.5, 8, 8))
 
         right = rect.right() - 12
-        if g["total"] is not None:
+        if g["total"]:
             font = _font(option.font, bold=g["active"])
             p.setFont(font)
             p.setPen(QColor(theme.ACTIVE if g["active"] else theme.TEXT_2))

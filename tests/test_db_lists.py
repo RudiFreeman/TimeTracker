@@ -53,6 +53,21 @@ def test_work_sessions_total_counts_running_time(db, pair):
     assert db.work_sessions(at=at(10, 30))[0]["total"] == 1800
 
 
+def test_work_sessions_pair_total_includes_finished_sessions(db, pair):
+    """Завершили подзадачу и начали снова — в списке всё время подзадачи, а не только новой сессии
+    (TitanFlex показывал 00:00:01 вместо 37 мин, 2.3.0)."""
+    p, s = pair("A")
+    first = db.start(p, s, at=at(10))
+    db.stop(first, at=at(11))
+    db.start(p, s, at=at(12))
+    other = pair("A", "Другая")
+    db.start(*other, at=at(12, 10))  # другая подзадача той же задачи не смешивается
+    rows = {r["subtask"]: r for r in db.work_sessions(at=at(12, 30))}
+    assert rows["Without task"]["total"] == 600  # сама сессия: 12:00–12:10
+    assert rows["Without task"]["pair_total"] == 3600 + 600
+    assert rows["Другая"]["pair_total"] == 1200
+
+
 def test_last_session(db, pair):
     db.start(*pair("A"), at=at(10))
     b = db.start(*pair("B"), at=at(11))

@@ -425,12 +425,16 @@ class Database:
     def work_sessions(self, at=None):
         """The timer window's list: open sessions plus, for every product not yet handed over
         («сдан»), the last finished session of each product+subtask that has nothing open.
-        Active first, then by last activity."""
+        Active first, then by last activity. ``total`` is the session's own time, ``pair_total`` —
+        all sessions of its product+subtask (what the list shows)."""
         at = at or now()
         rows = self.conn.execute(
             f"""SELECT {SESSION_COLUMNS},
                        COALESCE(SUM({SECONDS.format(start="i.start", end="COALESCE(i.end, :now)")}), 0) AS total,
-                       COALESCE(MAX(COALESCE(i.end, :now)), s.created_at) AS last_activity
+                       COALESCE(MAX(COALESCE(i.end, :now)), s.created_at) AS last_activity,
+                       (SELECT COALESCE(SUM({SECONDS.format(start="j.start", end="COALESCE(j.end, :now)")}), 0)
+                          FROM intervals j JOIN sessions y ON y.id = j.session_id
+                         WHERE y.product_id = s.product_id AND y.subtask_id = s.subtask_id) AS pair_total
                 {SESSION_JOINS}
                 LEFT JOIN intervals i ON i.session_id = s.id
                 WHERE s.status != 'stopped'

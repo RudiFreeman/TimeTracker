@@ -93,21 +93,28 @@ def test_empty_fields_main_button(window):
 
 def test_group_rows_order_and_totals():
     sessions = [  # как из work_sessions: идущая первой, дальше по последней работе
-        {"id": 1, "product_id": 10, "product": "DAC", "subtask": "ИИ", "status": "active", "total": 7},
-        {"id": 2, "product_id": 20, "product": "Titan", "subtask": "Сборка", "status": "paused", "total": 1},
-        {"id": 3, "product_id": 10, "product": "DAC", "subtask": "Съемка", "status": "paused", "total": 100},
-        {"id": 4, "product_id": 30, "product": "Pulsar", "subtask": "Монтаж", "status": "stopped", "total": 50},
+        {"id": 1, "product_id": 10, "product": "DAC", "subtask_id": 1, "subtask": "ИИ", "status": "active",
+         "total": 7, "pair_total": 7},
+        {"id": 2, "product_id": 20, "product": "Titan", "subtask_id": 2, "subtask": "Сборка", "status": "paused",
+         "total": 1, "pair_total": 2221},  # прошлая завершённая сессия — 37 мин
+        {"id": 3, "product_id": 10, "product": "DAC", "subtask_id": 3, "subtask": "Съемка", "status": "paused",
+         "total": 100, "pair_total": 100},
+        {"id": 5, "product_id": 10, "product": "DAC", "subtask_id": 3, "subtask": "Съемка", "status": "paused",
+         "total": 30, "pair_total": 100},  # две открытые сессии одной подзадачи — считать один раз
+        {"id": 4, "product_id": 30, "product": "Pulsar", "subtask_id": 4, "subtask": "Монтаж", "status": "stopped",
+         "total": 50, "pair_total": 50},
     ]
     rows = TimerWindow._group_rows(sessions, {10: 500})
     shape = [(r.get("kind"), r.get("id") or r["product"]) for r in rows]
-    assert shape == [("group", "DAC"), (None, 1), (None, 3),
+    assert shape == [("group", "DAC"), (None, 1), (None, 3), (None, 5),
                      ("group", "Titan"), (None, 2),
                      ("group", "Pulsar"), (None, 4)]
     dac, titan, pulsar = (r for r in rows if r.get("kind") == "group")
     assert dac["first"] and not titan["first"]
     assert dac["active"] and not titan["active"]
     assert dac["total"] == 107 and dac["tokens"] == 500
-    assert pulsar["total"] is None  # всё завершено — время в заголовке не показываем
+    assert titan["total"] == 2221  # всё время задачи, не только открытой сессии
+    assert pulsar["total"] == 50  # завершённые подзадачи тоже считаются, пока задачу не сдали
 
 
 def test_list_headers_not_selectable(window, db, pair):

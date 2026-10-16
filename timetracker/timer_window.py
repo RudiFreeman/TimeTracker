@@ -473,11 +473,12 @@ class TimerWindow(QWidget):
             groups.setdefault(s["product_id"], []).append(s)
         rows = []
         for product_id, items in groups.items():
-            open_items = [s for s in items if s["status"] != "stopped"]
+            # All the time of the product's subtasks, finished sessions too; once per subtask.
+            pairs = {s["subtask_id"]: s["pair_total"] for s in items}
             rows.append({"kind": "group", "product_id": product_id, "product": items[0]["product"],
                          "tokens": tokens.get(product_id, 0), "first": not rows,
                          "active": any(s["status"] == "active" for s in items),
-                         "total": sum(s["total"] for s in open_items) if open_items else None})
+                         "total": sum(pairs.values())})
             rows.extend(items)
         return rows
 
