@@ -10,6 +10,11 @@ from PySide6.QtWidgets import QApplication, QHBoxLayout, QLabel, QPushButton, QT
 from . import __version__, theme, update_dialog
 
 AUTHOR = "Алексей Рудович"
+REPO_URL = "https://github.com/RudiFreeman/TimeTracker"
+LICENSE_TEXT = (f'Бесплатная программа с открытым кодом, лицензия MIT · <a href="{REPO_URL}">исходный код на GitHub</a>. '
+                'Qt / PySide6 — под лицензией <a href="https://www.qt.io/qt-for-python">LGPL v3</a>.')
+PRIVACY_TEXT = ("Ваши данные никуда не отправляются: всё хранится в файле timetracker.db рядом с программой. "
+                "В интернет программа ходит только чтобы проверить обновления на GitHub.")
 DESCRIPTION = ("Портативный трекер рабочего времени для монтажёра и продюсера контента: таймер по задачам "
                "и подзадачам, журнал по дням, сводка по задачам и учёт токенов AI-сервисов.")
 # CHANGELOG.md лежит в корне проекта; в exe build.bat кладёт его в корень сборки — путь тот же.
@@ -59,6 +64,10 @@ class AboutPage(QWidget):
         layout.addWidget(QLabel(
             f"Сделано на Python {platform.python_version()} · Qt / PySide6 {pyside_version} · SQLite. "
             "Иконки — Segoe MDL2 Assets.", objectName="hint", wordWrap=True))
+        license_label = QLabel(LICENSE_TEXT, objectName="hint", wordWrap=True, openExternalLinks=True)
+        license_label.setTextFormat(Qt.RichText)
+        layout.addWidget(license_label)
+        layout.addWidget(QLabel(PRIVACY_TEXT, objectName="hint", wordWrap=True))
 
         row = QHBoxLayout()
         copy = QPushButton("Скопировать версию")
