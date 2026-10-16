@@ -124,11 +124,10 @@ class TimerWindow(QWidget):
         self.list = QListWidget()
         self.list.setItemDelegate(EntryDelegate(self.list))
         self.list.setMouseTracking(True)
-        self.list.setUniformItemSizes(True)
         self.list.setSelectionMode(QAbstractItemView.SingleSelection)
         self.list.setContextMenuPolicy(Qt.CustomContextMenu)
         self.list.itemClicked.connect(self._on_item_clicked)
-        self.list.itemDoubleClicked.connect(lambda item: self._continue(payload(self.list.indexFromItem(item))))
+        self.list.itemDoubleClicked.connect(self._on_item_double_clicked)
         self.list.itemSelectionChanged.connect(self._update_timer)
         self.list.customContextMenuRequested.connect(self._list_menu)
         root.addWidget(self.list, 1)
@@ -341,19 +340,25 @@ class TimerWindow(QWidget):
 
     def _selected_id(self):
         items = self.list.selectedItems()
-        return payload(self.list.indexFromItem(items[0]))["id"] if items else None
+        return payload(self.list.indexFromItem(items[0])).get("id") if items else None
 
     def _select(self, session_id):
         for row in range(self.list.count()):
             item = self.list.item(row)
-            if payload(self.list.indexFromItem(item))["id"] == session_id:
+            if payload(self.list.indexFromItem(item)).get("id") == session_id:
                 self.list.setCurrentItem(item)
                 return
 
     def _on_item_clicked(self, item):
         s = payload(self.list.indexFromItem(item))
         self._set_text(self.product, s["product"])
-        self._set_text(self.subtask, s["subtask"])
+        if s.get("kind") != "group":
+            self._set_text(self.subtask, s["subtask"])
+
+    def _on_item_double_clicked(self, item):
+        s = payload(self.list.indexFromItem(item))
+        if s.get("kind") != "group":
+            self._continue(s)
 
     def _list_menu(self, pos):
         item = self.list.itemAt(pos)
@@ -361,12 +366,14 @@ class TimerWindow(QWidget):
             return
         s = payload(self.list.indexFromItem(item))
         menu = QMenu(self)
-        if s["status"] == "active":
+        if s.get("kind") == "group":
+            pass  # product header: only the product actions below
+        elif s["status"] == "active":
             menu.addAction(theme.glyph_icon(theme.G_PAUSE), "Пауза", self.pause)
         else:
             menu.addAction(theme.glyph_icon(theme.G_PLAY), "Возобновить" if s["status"] == "stopped" else "Продолжить",
                            lambda: self._continue(s))
-        if s["status"] != "stopped":
+        if s.get("status", "stopped") != "stopped":
             menu.addAction(theme.glyph_icon(theme.G_STOP), "Завершить сессию", lambda: self.stop(s["id"]))
         menu.addAction(theme.glyph_icon(theme.G_CHECK), "Сдать продукт",
                        lambda: self.archive_product(s["product_id"], s["product"]))
@@ -408,24 +415,30 @@ class TimerWindow(QWidget):
             s["tokens"] = tokens.get(s["product_id"], 0)
         self._sessions = {s["id"]: s for s in sessions}
 
-        ids = [s["id"] for s in sessions]
+        rows = self._group_rows(sessions, tokens)
+        ids = [row.get("id", ("group", row["product_id"])) for row in rows]
         if ids != self._list_ids:
             selected = self._selected_id()
             self.list.blockSignals(True)
             self.list.clear()
-            for s in sessions:
+            for row in rows:
                 item = QListWidgetItem()
-                item.setData(DATA, Box(s))
-                item.setToolTip(f"{s['product']} · {s['subtask']}")
+                item.setData(DATA, Box(row))
+                if row.get("kind") == "group":
+                    item.setFlags(Qt.ItemIsEnabled)  # header: not selectable
+                    item.setToolTip(row["product"])
+                else:
+                    item.setToolTip(f"{row['product']} · {row['subtask']}")
                 self.list.addItem(item)
             self.list.blockSignals(False)
             self._list_ids = ids
             if selected in self._sessions:
                 self._select(selected)
         else:
-            for row, s in enumerate(sessions):
-                self.list.item(row).setData(DATA, Box(s))
-        self.list_title.setText(f"В работе: {len(sessions)}  ·  двойной клик — продолжить"
+            for i, row in enumerate(rows):
+                self.list.item(i).setData(DATA, Box(row))
+        groups = len(rows) - len(sessions)
+        self.list_title.setText(f"Продуктов: {groups}  ·  задач: {len(sessions)}  ·  двойной клик — продолжить"
                                 if sessions else "Нет задач в работе")
 
         active = next((s for s in sessions if s["status"] == "active"), None)
@@ -438,6 +451,23 @@ class TimerWindow(QWidget):
         today = datetime.combine(at.date(), datetime.min.time())
         self.today.setText(f"Сегодня: {theme.fmt_human(self.db.total_between(today, at, at))}")
         self._update_timer()
+
+    @staticmethod
+    def _group_rows(sessions, tokens):
+        """List rows: a header per product, then its subtasks. Sessions come active first, then by
+        last activity, so products keep that order (the running one on top) and so do subtasks."""
+        groups = {}
+        for s in sessions:
+            groups.setdefault(s["product_id"], []).append(s)
+        rows = []
+        for product_id, items in groups.items():
+            open_items = [s for s in items if s["status"] != "stopped"]
+            rows.append({"kind": "group", "product_id": product_id, "product": items[0]["product"],
+                         "tokens": tokens.get(product_id, 0), "first": not rows,
+                         "active": any(s["status"] == "active" for s in items),
+                         "total": sum(s["total"] for s in open_items) if open_items else None})
+            rows.extend(items)
+        return rows
 
     def _active(self):
         return next((s for s in self._sessions.values() if s["status"] == "active"), None)

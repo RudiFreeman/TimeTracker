@@ -12,6 +12,9 @@ DATA = Qt.UserRole
 DAY_HEIGHT = 46     # includes the gap above the card
 ENTRY_HEIGHT = 30
 DAY_GAP = 6
+GROUP_HEIGHT = 26   # product header in the timer window's list
+GROUP_GAP = 8       # space above every product header but the first
+GROUP_INDENT = 14   # subtask rows under a product header
 
 
 class Box:
@@ -38,7 +41,7 @@ def _font(base, bold=False, size=None, family=None):
 
 
 def paint_entry(p, rect, base_font, color, title, subtitle, right_text, hover=False, active=False, selected=False,
-                tokens_text=None, muted=False):
+                tokens_text=None, muted=False, title_bold=True):
     """One task row: color bar, "Product • subtask", [tokens], time on the right."""
     p.setPen(Qt.NoPen)
     p.setBrush(QColor("#363636" if selected else theme.ROW_HOVER if hover else theme.ROW))
@@ -71,7 +74,7 @@ def paint_entry(p, rect, base_font, color, title, subtitle, right_text, hover=Fa
         p.drawText(QRect(x, rect.top(), 14, rect.height()), Qt.AlignVCenter | Qt.AlignLeft, theme.G_PLAY)
         x += 16
         avail -= 16
-    title_font = _font(base_font, bold=True)
+    title_font = _font(base_font, bold=title_bold)
     fm = QFontMetrics(title_font)
     title_text = fm.elidedText(title, Qt.ElideRight, max(0, avail))
     p.setFont(title_font)
@@ -158,9 +161,12 @@ class JournalDelegate(QStyledItemDelegate):
 
 
 class EntryDelegate(QStyledItemDelegate):
-    """Rows of the timer window's open-session list."""
+    """Rows of the timer window's list: a header per product, its subtasks indented under it."""
 
     def sizeHint(self, option, index):
+        s = payload(index) or {}
+        if s.get("kind") == "group":
+            return QSize(100, GROUP_HEIGHT + (0 if s["first"] else GROUP_GAP))
         return QSize(100, ENTRY_HEIGHT)
 
     def paint(self, p, option, index):
@@ -169,10 +175,52 @@ class EntryDelegate(QStyledItemDelegate):
             return
         p.save()
         p.setRenderHint(p.RenderHint.Antialiasing)
-        finished = s["status"] == "stopped"
-        paint_entry(p, option.rect.adjusted(0, 1, 0, -1), option.font, theme.product_color(s["product_id"]),
-                    s["product"], s["subtask"], "✓ завершено" if finished else fmt_duration(s["total"]),
-                    hover=bool(option.state & QStyle.State_MouseOver), active=s["status"] == "active",
-                    selected=bool(option.state & QStyle.State_Selected),
-                    tokens_text=theme.fmt_tokens(s["tokens"]) if s.get("tokens") else None, muted=finished)
+        if s.get("kind") == "group":
+            self._paint_group(p, option, s)
+        else:
+            finished = s["status"] == "stopped"
+            rect = option.rect.adjusted(GROUP_INDENT, 1, 0, -1)
+            paint_entry(p, rect, option.font, theme.product_color(s["product_id"]),
+                        s["subtask"], None, "✓ завершено" if finished else fmt_duration(s["total"]),
+                        hover=bool(option.state & QStyle.State_MouseOver), active=s["status"] == "active",
+                        selected=bool(option.state & QStyle.State_Selected), muted=finished, title_bold=False)
         p.restore()
+
+    @staticmethod
+    def _paint_group(p, option, g):
+        """Product name once, its tokens and the time of its open subtasks on the right."""
+        rect = option.rect.adjusted(0, 0 if g["first"] else GROUP_GAP, 0, 0)
+        if option.state & QStyle.State_MouseOver:
+            p.setPen(Qt.NoPen)
+            p.setBrush(QColor(theme.ROW))
+            p.drawRoundedRect(QRectF(rect), 4, 4)
+        color = QColor(theme.product_color(g["product_id"]))
+        p.setPen(Qt.NoPen)
+        p.setBrush(color)
+        p.drawEllipse(QRectF(rect.left() + 5, rect.center().y() - 3.5, 8, 8))
+
+        right = rect.right() - 12
+        if g["total"] is not None:
+            font = _font(option.font, bold=g["active"])
+            p.setFont(font)
+            p.setPen(QColor(theme.ACTIVE if g["active"] else theme.TEXT_2))
+            p.drawText(QRect(rect.left(), rect.top(), right - rect.left(), rect.height()),
+                       Qt.AlignVCenter | Qt.AlignRight, fmt_duration(g["total"]))
+            right -= QFontMetrics(font).horizontalAdvance(fmt_duration(g["total"])) + 14
+        if g["tokens"]:
+            text = theme.fmt_tokens(g["tokens"])
+            font = _font(option.font, size=9)
+            w = QFontMetrics(font).horizontalAdvance(text)
+            p.setFont(font)
+            p.setPen(QColor(theme.TEXT_3))
+            p.drawText(QRect(right - w, rect.top(), w, rect.height()), Qt.AlignVCenter | Qt.AlignRight, text)
+            p.setFont(_font(option.font, size=8, family=theme.ICON_FONT))
+            p.drawText(QRect(right - w - 16, rect.top(), 14, rect.height()), Qt.AlignCenter, theme.G_TOKENS)
+            right -= w + 26
+
+        x = rect.left() + 20
+        font = _font(option.font, bold=True)
+        p.setFont(font)
+        p.setPen(QColor(theme.TEXT))
+        p.drawText(QRect(x, rect.top(), max(0, right - x), rect.height()), Qt.AlignVCenter | Qt.AlignLeft,
+                   QFontMetrics(font).elidedText(g["product"], Qt.ElideRight, max(0, right - x)))
