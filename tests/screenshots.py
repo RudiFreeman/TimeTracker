@@ -62,7 +62,7 @@ def main():
     timer.main_window = MainWindow(db, hub, timer)
     hub.changed.emit()
     grab(timer, folder, "1-timer")
-    timer.mini.sync()
+    timer.mini.show_mini()  # as on minimizing the timer window
     grab(timer.mini, folder, "2-mini")
     timer.mini.hide()
     for index, name in enumerate(("journal", "summary", "settings", "about")):
