@@ -17,10 +17,25 @@ from timetracker.tray import Tray
 _mutex = []  # keep the single-instance handle alive for the process lifetime
 
 
+def _acquire_lock_file():
+    """macOS / Linux: an exclusive lock on a file next to the database; the system drops it when
+    the process exits, even after a crash."""
+    import fcntl
+    import os
+    handle = open(os.path.join(app_dir(), ".timetracker.lock"), "w")
+    try:
+        fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        handle.close()
+        return False
+    _mutex.append(handle)
+    return True
+
+
 def acquire_single_instance():
     """One copy per folder: two copies on one database would run two timers at once."""
     if sys.platform != "win32":
-        return True
+        return _acquire_lock_file()
     kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
     kernel32.CreateMutexW.restype = ctypes.c_void_p
     kernel32.CloseHandle.argtypes = (ctypes.c_void_p,)
@@ -44,7 +59,9 @@ def wait_single_instance(seconds=15):
 
 
 def release_single_instance():
-    if _mutex:
+    if _mutex and sys.platform != "win32":
+        _mutex.pop().close()
+    elif _mutex:
         kernel32 = ctypes.WinDLL("kernel32")
         kernel32.CloseHandle.argtypes = (ctypes.c_void_p,)
         kernel32.CloseHandle(_mutex.pop())
@@ -64,6 +81,7 @@ def main():
         return run_replacer(sys.argv[sys.argv.index(updater.REPLACE_FLAG) + 1])
     app = QApplication(sys.argv)
     app.setApplicationName(APP_TITLE)
+    theme.load_fonts()  # macOS: the bundled icon font
     # Windows' "slide open" combo animation leaves one frame with no list at all (the big timer
     # shows through) between the animation and the real popup.
     app.setEffectEnabled(Qt.UI_AnimateCombo, False)

@@ -35,7 +35,7 @@ def _font(base, bold=False, size=None, family=None):
     if family:
         font.setFamily(family)
     if size:
-        font.setPointSizeF(size)
+        font.setPointSizeF(theme.pt(size))
     font.setBold(bold)
     return font
 

@@ -35,6 +35,7 @@ class MiniWindow(QWidget):
         self._drag = None
         self._mode = None
         self.setAttribute(Qt.WA_TranslucentBackground)
+        self.setAttribute(Qt.WA_MacAlwaysShowToolWindow)  # macOS hides tool windows when another app is active
         self.setFixedSize(322, 68)
         self._note = None  # short message shown instead of the task name for a few seconds
         self._note_timer = QTimer(self, singleShot=True, interval=4000, timeout=self._clear_note)

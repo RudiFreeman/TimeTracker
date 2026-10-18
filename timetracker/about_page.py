@@ -63,7 +63,8 @@ class AboutPage(QWidget):
         layout.addWidget(QLabel(f"Автор: {AUTHOR}", objectName="secondary"))
         layout.addWidget(QLabel(
             f"Сделано на Python {platform.python_version()} · Qt / PySide6 {pyside_version} · SQLite. "
-            "Иконки — Segoe MDL2 Assets.", objectName="hint", wordWrap=True))
+            f"Иконки — {'Fluent UI System Icons (MIT)' if theme.MAC else 'Segoe MDL2 Assets'}.",
+            objectName="hint", wordWrap=True))
         license_label = QLabel(LICENSE_TEXT, objectName="hint", wordWrap=True, openExternalLinks=True)
         license_label.setTextFormat(Qt.RichText)
         layout.addWidget(license_label)

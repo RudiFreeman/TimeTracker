@@ -81,8 +81,14 @@ SECONDS = "ROUND((julianday({end}) - julianday({start})) * 86400)"
 
 
 def app_dir():
-    """Folder next to the .exe (or the project root when run from source)."""
+    """Folder next to the .exe (or the project root when run from source).
+    macOS: ~/Library/Application Support/TimeTracker — the .app bundle is replaced as a whole on
+    update (and may sit in read-only /Applications), so the data can't live inside or next to it."""
     if getattr(sys, "frozen", False):
+        if sys.platform == "darwin":
+            folder = os.path.join(os.path.expanduser("~"), "Library", "Application Support", "TimeTracker")
+            os.makedirs(folder, exist_ok=True)
+            return folder
         return os.path.dirname(sys.executable)
     return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 

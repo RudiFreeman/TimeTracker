@@ -21,6 +21,14 @@ KEY = Qt.UserRole + 1
 AUTO_REFRESH_MS = 5000
 
 
+def _report_dir():
+    """Where «Экспорт CSV» suggests saving: next to the program; on macOS the data folder is hidden
+    in ~/Library, so Documents."""
+    if theme.MAC:
+        return os.path.join(os.path.expanduser("~"), "Documents")
+    return dbm.app_dir()
+
+
 def theme_color(hex_color):
     return QBrush(QColor(hex_color))
 
@@ -526,13 +534,13 @@ class SummaryPage(QWidget):
             dialogs.error(self, "Экспорт", "За выбранный период нет данных.")
             return
         path, _ = QFileDialog.getSaveFileName(
-            self, "Сохранить отчёт", os.path.join(dbm.app_dir(), f"time_report_{dbm.now():%Y-%m-%d}.csv"), "CSV (*.csv)"
+            self, "Сохранить отчёт", os.path.join(_report_dir(), f"time_report_{dbm.now():%Y-%m-%d}.csv"), "CSV (*.csv)"
         )
         if not path:
             return
         reporting.write_csv(path, rows)
         if dialogs.ask(self, "Экспорт", f"Отчёт сохранён:\n{path}\n\nОткрыть файл?"):
-            os.startfile(path)
+            system.open_path(path)
 
     def _menu(self, pos):
         item = self.tree.itemAt(pos)
@@ -675,17 +683,17 @@ class SettingsPage(QWidget):
         layout.addWidget(frame)
 
         frame, box = card("Запуск")
-        self.autostart = QCheckBox("Запускать вместе с Windows")
+        self.autostart = QCheckBox(system.AUTOSTART_TEXT)
         if system.autostart_supported():
             self.autostart.toggled.connect(self._save_autostart)
         else:
             self.autostart.setEnabled(False)
-            self.autostart.setToolTip("Доступно только в собранной программе TimeTracker.exe")
+            self.autostart.setToolTip("Доступно только в собранной программе")
         box.addWidget(self.autostart)
         layout.addWidget(frame)
 
         frame, box = card("Данные и резервные копии",
-                          f"Вся база — один файл рядом с программой. Раз в день её копия сохраняется в папку "
+                          f"Вся база — один файл {'в папке ниже' if theme.MAC else 'рядом с программой'}. Раз в день её копия сохраняется в папку "
                           f"«{dbm.BACKUP_DIR}», хранятся последние {dbm.BACKUP_KEEP}.")
         path = QLabel(self.db.path, objectName="secondary", wordWrap=True)
         path.setTextInteractionFlags(Qt.TextSelectableByMouse)
@@ -694,7 +702,7 @@ class SettingsPage(QWidget):
         box.addWidget(self.backup_info)
         row = QHBoxLayout()
         open_folder = QPushButton("Открыть папку")
-        open_folder.clicked.connect(lambda: os.startfile(os.path.dirname(self.db.path)))
+        open_folder.clicked.connect(lambda: system.open_path(os.path.dirname(self.db.path)))
         backup_now = QPushButton("Сделать копию сейчас")
         backup_now.clicked.connect(self._backup_now)
         open_backups = QPushButton("Папка с копиями")
@@ -737,7 +745,7 @@ class SettingsPage(QWidget):
 
     def _open_backups(self):
         os.makedirs(self.db.backup_dir(), exist_ok=True)
-        os.startfile(self.db.backup_dir())
+        system.open_path(self.db.backup_dir())
 
     def _save_limit(self, *_):
         self.db.set_setting("limit_enabled", "1" if self.limit_enabled.isChecked() else "0")

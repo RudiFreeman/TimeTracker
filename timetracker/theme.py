@@ -30,16 +30,54 @@ TRACK_WORK = "#4a4a4a"  # working hours on the timeline track
 
 PRODUCT_COLORS = ["#c5b31c", "#6ccb5f", "#f7630c", "#4c8bf5", "#b46ef0", "#2ec7b5", "#ef6ea8", "#e8a33a"]
 
-ICON_FONT = "Segoe MDL2 Assets"
-G_PLAY, G_PAUSE, G_STOP = "", "", ""
-G_ADD, G_CHECK, G_CLOSE = "", "", ""
-G_DOWN, G_UP, G_RIGHT = "", "", ""
-G_CLOCK, G_CHART, G_SETTINGS = "", "", ""
-G_PIN, G_PINNED, G_EXPORT, G_DELETE, G_SEARCH = "", "", "", "", ""
-G_EDIT = "\ue70f"  # Edit (pencil)
-G_EXPAND = "\ue740"  # FullScreen arrows
-G_TOKENS = ""  # Calculator
-G_INFO = "\ue946"  # Info
+MAC = sys.platform == "darwin"
+# A point is smaller on macOS (72 dpi vs 96 on Windows): every font size goes through pt() so the
+# layout looks the same on both.
+PT_SCALE = 4 / 3 if MAC else 1.0
+
+
+def pt(size):
+    """Font size in Windows points -> the same visual size on this system."""
+    return round(size * PT_SCALE, 2) if MAC else size
+
+
+if MAC:
+    # Segoe MDL2 Assets exists only on Windows. The same icons from Microsoft's Fluent UI System Icons
+    # (MIT), cut down to these glyphs: timetracker/icons.ttf, registered by load_fonts().
+    ICON_FONT = "FluentSystemIcons-Regular"
+    GLYPH_SCALE = 1.0  # Fluent glyphs have less padding than MDL2
+    G_PLAY, G_PAUSE, G_STOP = "", "", ""
+    G_ADD, G_CHECK, G_CLOSE = "", "", ""
+    G_DOWN, G_UP, G_RIGHT = "", "", ""
+    G_CLOCK, G_CHART, G_SETTINGS = "", "", ""
+    G_PIN, G_PINNED, G_EXPORT, G_DELETE, G_SEARCH = "", "", "", "", ""
+    G_EDIT = ""
+    G_EXPAND = ""
+    G_TOKENS = ""
+    G_INFO = ""
+    UI_FONT = DISPLAY_FONT = ""  # the system font
+else:
+    ICON_FONT = "Segoe MDL2 Assets"
+    GLYPH_SCALE = 0.8
+    G_PLAY, G_PAUSE, G_STOP = "", "", ""
+    G_ADD, G_CHECK, G_CLOSE = "", "", ""
+    G_DOWN, G_UP, G_RIGHT = "", "", ""
+    G_CLOCK, G_CHART, G_SETTINGS = "", "", ""
+    G_PIN, G_PINNED, G_EXPORT, G_DELETE, G_SEARCH = "", "", "", "", ""
+    G_EDIT = ""  # Edit (pencil)
+    G_EXPAND = ""  # FullScreen arrows
+    G_TOKENS = ""  # Calculator
+    G_INFO = ""  # Info
+    UI_FONT = '"Segoe UI Variable Text", "Segoe UI"'
+    DISPLAY_FONT = '"Segoe UI Variable Display", "Segoe UI"'
+
+
+def load_fonts():
+    """Register the bundled icon font (macOS). Call once, after QApplication is created."""
+    if MAC:
+        from PySide6.QtGui import QFontDatabase
+        QFontDatabase.addApplicationFont(os.path.join(os.path.dirname(os.path.abspath(__file__)), "icons.ttf"))
+
 
 WEEKDAYS = ["пн", "вт", "ср", "чт", "пт", "сб", "вс"]
 
@@ -81,7 +119,7 @@ def glyph_pixmap(glyph, color=TEXT, size=16):
     p = QPainter(pix)
     p.setRenderHint(QPainter.TextAntialiasing)
     font = QFont(ICON_FONT)
-    font.setPixelSize(int(size * ratio * 0.8))
+    font.setPixelSize(int(size * ratio * GLYPH_SCALE))
     p.setFont(font)
     p.setPen(QColor(color))
     p.drawText(QRect(0, 0, size * ratio, size * ratio), Qt.AlignCenter, glyph)
@@ -129,15 +167,17 @@ def _asset_dir():
 
 def stylesheet():
     a = _asset_dir()
+    ui = f"font-family: {UI_FONT}; " if UI_FONT else ""
+    display = f"font-family: {DISPLAY_FONT}; " if DISPLAY_FONT else ""
     return f"""
-* {{ font-family: "Segoe UI Variable Text", "Segoe UI"; font-size: 10pt; color: {TEXT}; }}
+* {{ {ui}font-size: {pt(10)}pt; color: {TEXT}; }}
 QWidget#window, QDialog, QMessageBox {{ background: {BG}; }}
 QWidget#sidebar {{ background: {SIDEBAR}; }}
-QLabel#title {{ font-size: 18pt; font-weight: 600; }}
-QLabel#hint {{ color: {TEXT_3}; font-size: 9pt; }}
+QLabel#title {{ font-size: {pt(18)}pt; font-weight: 600; }}
+QLabel#hint {{ color: {TEXT_3}; font-size: {pt(9)}pt; }}
 QLabel#secondary {{ color: {TEXT_2}; }}
-QLabel#section {{ font-weight: 600; font-size: 10.5pt; }}
-QLabel#timer {{ font-family: "Segoe UI Variable Display", "Segoe UI"; font-size: 30pt; font-weight: 600; color: {TEXT_3}; }}
+QLabel#section {{ font-weight: 600; font-size: {pt(10.5)}pt; }}
+QLabel#timer {{ {display}font-size: {pt(30)}pt; font-weight: 600; color: {TEXT_3}; }}
 QLabel#timer[running="true"] {{ color: {ACTIVE}; }}
 QFrame#card {{ background: {CARD}; border-radius: 6px; }}
 
@@ -169,11 +209,11 @@ QPushButton:disabled {{ color: {TEXT_3}; }}
 QPushButton#accent {{ background: {ACCENT}; color: #000000; border: none; font-weight: 600; }}
 QPushButton#accent:hover {{ background: {ACCENT_HOVER}; }}
 QPushButton#accent:pressed {{ background: #42a1d2; }}
-QPushButton#main {{ background: {ACCENT}; color: #000000; border: none; font-weight: 600; font-size: 10.5pt; }}
+QPushButton#main {{ background: {ACCENT}; color: #000000; border: none; font-weight: 600; font-size: {pt(10.5)}pt; }}
 QPushButton#main:hover {{ background: {ACCENT_HOVER}; }}
 QPushButton#main[mode="pause"] {{ background: {PAUSE}; }}
 QPushButton#main[mode="pause"]:hover {{ background: {PAUSE_HOVER}; }}
-QLabel#miniTime {{ font-family: "Segoe UI Variable Display", "Segoe UI"; font-size: 20pt; font-weight: 600; color: {TEXT_3}; }}
+QLabel#miniTime {{ {display}font-size: {pt(20)}pt; font-weight: 600; color: {TEXT_3}; }}
 QLabel#miniTime[running="true"] {{ color: {ACTIVE}; }}
 QPushButton#miniMain {{ background: {ACCENT}; border: none; border-radius: 18px; padding: 0; min-height: 0; }}
 QPushButton#miniIcon {{ background: transparent; border: none; border-radius: 6px; padding: 0; min-height: 0; }}
@@ -206,7 +246,7 @@ QTreeWidget#summary::branch:has-children:closed, QTreeWidget#summary::branch:has
 QListWidget#plain {{ background: {CARD}; border: 1px solid {BORDER}; border-radius: 6px; padding: 4px; }}
 QListWidget#plain::item {{ height: 26px; padding-left: 6px; border-radius: 4px; }}
 QListWidget#plain::item:selected {{ background: #3a3a3a; color: {TEXT}; }}
-QHeaderView::section {{ background: {BG}; color: {TEXT_3}; border: none; padding: 4px 8px; font-size: 9pt; }}
+QHeaderView::section {{ background: {BG}; color: {TEXT_3}; border: none; padding: 4px 8px; font-size: {pt(9)}pt; }}
 
 QScrollBar:vertical {{ background: transparent; width: 10px; margin: 2px; }}
 QScrollBar::handle:vertical {{ background: #5c5c5c; border-radius: 3px; min-height: 30px; }}

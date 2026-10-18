@@ -1,13 +1,13 @@
 # Portable Time Tracker — заметки для разработки
 
-Десктопный трекер времени для Windows (solo video editor / content producer). Исходные требования — [docs/PRD.md](docs/PRD.md).
+Десктопный трекер времени для Windows и macOS (solo video editor / content producer). Код один, сборки две — см. «Mac». Исходные требования — [docs/PRD.md](docs/PRD.md).
 Пользователь общается по-русски; весь UI на русском (кроме подзадачи по умолчанию «Without task» — так в PRD).
 
 ## Запуск и сборка
 - Из исходников: `pip install -r requirements.txt` → `python main.py` (Python 3.13, PySide6-Essentials).
 - Сборка: `build.bat` → `dist\TimeTracker.exe` (PyInstaller `--onefile --windowed`, ~35 МБ). `build/`, `dist/`, `*.spec` — артефакты.
 - База `timetracker.db` (SQLite) создаётся рядом с .exe (`db.app_dir()`: папка exe при frozen, иначе корень проекта).
-- Одна копия на папку — именованный mutex в [main.py](main.py).
+- Одна копия на папку — именованный mutex в [main.py](main.py) (Mac: `fcntl.flock` на `.timetracker.lock` в папке данных).
 - Git: публичный репозиторий https://github.com/RudiFreeman/TimeTracker, ветка `main`, push по HTTPS (SSH не настроен — пользователь хочет разобраться позже). Автор коммитов — `Aleksei Rudovich <31577017+RudiFreeman@users.noreply.github.com>` (локальный git config; gmail в публичный репо не светить). В репо не идут база, `backups/`, `build/`, `dist/`, `release/v*/` (см. .gitignore). Коммитить и пушить — когда пользователь просит; каждый выпуск версии — отдельный коммит «Time Tracker vX.Y.Z».
 - Раздача коллегам: `build.bat` в конце запускает [release.py](release.py), он кладёт сборку в `release/vX.Y.Z/` (номер из `__version__`): папка `TimeTracker/` и архив `TimeTracker-X.Y.Z.zip` **с одинаковым содержимым** — exe + README.txt + UPDATE.txt (копии шаблонов из корня `release/`, имена именно такие — по просьбе пользователя). Один архив и на новую установку, и на обновление. Больше ничего в папке версии нет (так решил пользователь). Любое изменение для коллег = новая папка версии. Папка внутри архива без номера — у коллег она постоянная, рядом лежит их база. Если папка версии уже есть, она перезаписывается с предупреждением. Базу в архивы не класть. В .bat — только латиница в комментариях.
 
@@ -19,7 +19,8 @@
   - **MINOR** — новая заметная функция (учёт токенов = 2.1.0);
   - **PATCH** — исправления и мелкие доработки без новых функций.
 - Версия поднимается **при выпуске** (сборка exe + обновление архивов в `release/`), а не при каждой правке. Порядок выпуска: поднять `__version__` → запись в [CHANGELOG.md](CHANGELOG.md) (новые сверху, дата, что изменилось простыми словами, отметка если менялась схема БД) → строка «Текущая версия» здесь → `python -m pytest` (все зелёные) → `build.bat` (сам создаст `release/vX.Y.Z/`) → [tests/QA_CHECKLIST.md](tests/QA_CHECKLIST.md) на собранном exe (раздел 0 + затронутые; пользователь проверяет сам перед отправкой на GitHub) → коммит «Time Tracker vX.Y.Z» + тег `vX.Y.Z` → push → GitHub Release (по просьбе пользователя): название «Time Tracker X.Y.Z», в описании «Скачать», «Установка», «Обновление» и «Что нового» из CHANGELOG, файл — `release/vX.Y.Z/TimeTracker-X.Y.Z.zip`. `gh` не установлен: релиз создаётся через REST API с токеном из `git credential fill` (scope repo), токен не печатать. Скачать последнюю версию: https://github.com/RudiFreeman/TimeTracker/releases/latest
-- **GitHub Release = канал автообновления** (с v2.2.0, см. «Автообновление»): программы коллег сами видят новый релиз. Поэтому: тег строго `vX.Y.Z`, релиз опубликован (не draft/prerelease — `releases/latest` их не видит), zip — единственный `.zip` в Assets и внутри есть `TimeTracker/TimeTracker.exe`, в описании заголовок `## Что нового` (всё после него показывается в окне обновления). Выложенный релиз сразу уйдёт всем — публиковать только проверенную сборку.
+- В релизе два файла: Windows `TimeTracker-X.Y.Z.zip` (из build.bat) и Mac `TimeTracker-X.Y.Z-mac.dmg` (артефакт `TimeTracker-mac` сборки GitHub Actions на коммите выпуска; скачать через API тем же токеном, проверить на Mac — пользователь проверяет дома). ⚠ Mac-файл — только `.dmg`, **никогда не `.zip`**: Windows-версии до 2.3.2 берут первый `.zip` релиза (`test_updater.py` это стережёт). Mac-файл можно догрузить в уже опубликованный релиз: без `.dmg` Mac-программы обновление просто не видят.
+- **GitHub Release = канал автообновления** (с v2.2.0, см. «Автообновление»): программы коллег сами видят новый релиз. Поэтому: тег строго `vX.Y.Z`, релиз опубликован (не draft/prerelease — `releases/latest` их не видит), zip — единственный `.zip` в Assets и внутри есть `TimeTracker/TimeTracker.exe`, dmg — единственный `.dmg`, в корне `TimeTracker.app`, в описании заголовок `## Что нового` (всё после него показывается в окне обновления). Выложенный релиз сразу уйдёт всем — публиковать только проверенную сборку.
 - Если сборка — только исправление уже выпущенного, это PATCH (2.1.0 → 2.1.1).
 
 ## Обязательные правила работы
@@ -47,6 +48,7 @@
 | [timetracker/about_page.py](timetracker/about_page.py) | Страница «О программе» (последний пункт сайдбара): иконка, название, версия, автор (`AUTHOR`), версии Python/PySide6, лицензия MIT + ссылка на репозиторий (`REPO_URL`) + Qt LGPL, строка о приватности, «Скопировать версию», «Проверить обновления» / «Обновить до X» (`AboutPage(timer)`), «Что нового» = CHANGELOG.md в `QTextBrowser.setMarkdown` (`## ` → `#### `) |
 | [timetracker/updater.py](timetracker/updater.py) | Автообновление без UI: `fetch_latest()` (GitHub API releases/latest), `Release` (версия, заметки, zip, sha256), `prepare()` — скачать (только GitHub, sha256 обязателен) и распаковать `TimeTracker.new.exe`, `launch_replacer()` / `replace()` — замена exe отдельным процессом, `cleanup()`, `describe_error()`, `Updater` (фоновые потоки + сигналы `checked`/`progress`/`prepared`) |
 | [timetracker/update_dialog.py](timetracker/update_dialog.py) | Окно «Доступно обновление» (что нового, прогресс, «Обновить» / «Пропустить»·«Позже») и `DailyCheck` — проверка раз в день с 09:00 + перезапуск, когда новая версия скачана (`finish_update`) |
+| [build_mac.sh](build_mac.sh), [.github/workflows/build-mac.yml](.github/workflows/build-mac.yml) | Сборка для Mac (только на macOS): PyInstaller onedir `.app` (иконка из `Icon.png`, версия в Info.plist, ad-hoc подпись `codesign -s -` — без неё Apple Silicon не запускает) → `release/vX.Y.Z/TimeTracker-X.Y.Z-mac.dmg` (app + ярлык Applications + README.txt из [release/README-mac.txt](release/README-mac.txt)). На GitHub запускается при каждом push (macos-14, M1): pytest → сборка → [tests/screenshots.py](tests/screenshots.py) → артефакты `TimeTracker-mac` и `screenshots` |
 | [timetracker/tray.py](timetracker/tray.py) | Иконка в трее: зелёная точка пока идёт таймер, тултип с временем; ЛКМ — показать/спрятать таймер; ПКМ — Пауза/Продолжить, Завершить, Журнал, Выход. Читает состояние из `TimerWindow` (`_active`, `_intent`, `_stop_target`) |
 
 ## Модель данных
@@ -66,6 +68,17 @@
 - Проверено 15.10.2026 на собранных exe: полная цепочка (пауза таймера, копия базы, замена, удаление `.new.exe`, без сбоев в журнале Windows) и отказ замены (файл только для чтения → старая версия с `--update-failed`). Сценарии окна (трей, мини-окно, модальный диалог, скрыть во время скачивания, «Выход» во время скачивания, ошибка скачивания) — из исходников с подменой `updater.prepare`.
 - Из исходников проверка работает, а «Обновить» открывает страницу релиза (`can_install()` = frozen + папка с правом записи, считается один раз). В Program Files и т.п. — тоже страница релиза.
 - Сеть — `urllib` (QtNetwork исключён из сборки), без токена: лимит GitHub 60 запросов/час с IP, нам хватает.
+
+## Mac (с 2.4.0)
+- Один код: различия только там, где проверяется `sys.platform == "darwin"` / `theme.MAC` / `updater.MAC`. На Windows поведение должно оставаться прежним (стили QSS на Windows сверялись побайтно).
+- Значки: Segoe MDL2 на Mac нет → `timetracker/icons.ttf` — подмножество Fluent UI System Icons (Microsoft, MIT, 20 глифов `*_20_regular`, `fontTools.subset`), регистрируется `theme.load_fonts()`; коды `G_*` для Mac в theme.py. Новый значок = добавить глиф в оба набора и пересобрать icons.ttf (полный шрифт: github.com/microsoft/fluentui-system-icons, `fonts/`).
+- Размеры шрифтов: пункт на Mac мельче (72 vs 96 dpi) → все размеры через `theme.pt()` (×4/3 на Mac, на Windows без изменений). Новые размеры шрифта — тоже через `pt()`.
+- Данные на Mac — `~/Library/Application Support/TimeTracker` (`db.app_dir()`), не рядом с программой: `.app` заменяется целиком при обновлении. CSV по умолчанию — в «Документы».
+- Автозапуск — LaunchAgent `~/Library/LaunchAgents/com.rudifreeman.timetracker.plist`; открыть папку — `system.open_path()` (не `os.startfile`, его на Mac нет).
+- Мини-окно: `WA_MacAlwaysShowToolWindow` — иначе Mac прячет Tool-окна, когда активна другая программа.
+- Обновление на Mac: `.dmg` → `hdiutil attach` → `ditto` в `TimeTracker.new.app` рядом с текущим → после выхода `/bin/sh`-скрипт (`updater.MAC_REPLACER`) ждёт pid, меняет пакеты местами (`.old.app`), `open … --args --updated` / `--update-failed`. Без права записи в папку программы или при запуске из «Загрузок»/.dmg (App Translocation) — страница релиза.
+- Без платной подписи Apple: первый запуск — «Всё равно открыть» в Конфиденциальности (README-mac.txt). Обновления скачиваются программой без карантина и открываются сами.
+- Проверить можно только на Mac: снимки окон — артефакт `screenshots`, остальное — раздел 7 QA_CHECKLIST.
 
 ## Резервные копии
 - `db.backup()` — копия базы (sqlite backup API, консистентно) в `backups/` рядом с базой: `timetracker-YYYY-MM-DD.db` раз в день (при запуске в main.py и при смене даты в `TimerWindow._tick`), «Сделать копию сейчас» → `..._HH-MM-SS.db`. Хранятся последние `BACKUP_KEEP` = 14. Ошибки копирования не должны ронять приложение.

@@ -64,7 +64,7 @@ def test_claude_md_history_has_current_version():
 
 
 @pytest.mark.parametrize("path", ["README.md", os.path.join("release", "README.txt"),
-                                  os.path.join("release", "UPDATE.txt")])
+                                  os.path.join("release", "UPDATE.txt"), os.path.join("release", "README-mac.txt")])
 def test_readmes_have_no_hardcoded_version(path):
     """В README номер не пишем: он устаревает. Версию показывает программа и страница релиза."""
     found = re.findall(rf"\b[vV]?{VERSION_RE}\b", read(path))

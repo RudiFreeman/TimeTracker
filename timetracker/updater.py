@@ -14,6 +14,13 @@ Why: a onefile exe reads its own Python modules from sys.executable while runnin
 or replacing the file under a running app breaks later imports (seen in tests 15.10.2026).
 The database next to the exe is never touched.
 Works only for the frozen exe; from source the check works, «Обновить» opens the release page.
+
+macOS: the release has TimeTracker-X.Y.Z-mac.dmg next to the Windows zip. It is a .dmg, never a .zip, on
+purpose: Windows versions up to 2.3.2 take the first .zip of the release. `prepare` mounts the dmg and
+copies TimeTracker.app to TimeTracker.new.app next to the running bundle; after the app has quit, a
+/bin/sh script (`launch_replacer`) waits for our pid, swaps the bundles and opens the new one with
+--updated (or the old one with --update-failed). The database lives in ~/Library/Application Support
+(db.app_dir), not in the bundle.
 """
 import hashlib
 import json
@@ -23,6 +30,7 @@ import shutil
 import ssl
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import urllib.error
@@ -45,6 +53,7 @@ TRUSTED_HOSTS = ("github.com", "githubusercontent.com")
 UPDATED_FLAG = "--updated"        # the new app after a successful update
 FAILED_FLAG = "--update-failed"   # the old app started again: tell the user
 REPLACE_FLAG = "--replace"        # TimeTracker.new.exe --replace <target exe>
+MAC = sys.platform == "darwin"
 
 _can_install = None
 
@@ -61,8 +70,9 @@ def can_install():
     global _can_install
     if _can_install is None:
         _can_install = False
-        if getattr(sys, "frozen", False):
-            probe = os.path.join(app_dir(), ".update-probe")
+        # macOS runs an app straight from Downloads from a random read-only copy (App Translocation).
+        if getattr(sys, "frozen", False) and not (MAC and "/AppTranslocation/" in sys.executable):
+            probe = os.path.join(os.path.dirname(bundle_path()) if MAC else app_dir(), ".update-probe")
             try:
                 with open(probe, "w"):
                     pass
@@ -107,14 +117,20 @@ def release_notes(body):
     return (body[m.end():] if m else body).strip()
 
 
+def pick_asset(assets, mac=None):
+    """The download for this system: Windows — the .zip, macOS — the .dmg."""
+    ext = ".dmg" if (MAC if mac is None else mac) else ".zip"
+    found = [a for a in assets or [] if a.get("name", "").lower().endswith(ext)]
+    return found[0] if found else {}
+
+
 class Release:
     def __init__(self, data):
         self.version = parse_version(data.get("tag_name"))
         self.tag = data.get("tag_name", "")
         self.page = data.get("html_url") or RELEASES_PAGE
         self.notes = release_notes(data.get("body"))
-        zips = [a for a in data.get("assets", []) if a.get("name", "").lower().endswith(".zip")]
-        asset = zips[0] if zips else {}
+        asset = pick_asset(data.get("assets"))
         self.url = asset.get("browser_download_url")
         self.size = asset.get("size")
         digest = asset.get("digest") or ""
@@ -133,11 +149,31 @@ def fetch_latest():
         return Release(json.load(response))
 
 
+def bundle_path(exe=None):
+    """macOS: …/TimeTracker.app for …/TimeTracker.app/Contents/MacOS/TimeTracker."""
+    return os.path.dirname(os.path.dirname(os.path.dirname(exe or sys.executable)))
+
+
 def _paths(exe=None):
-    """exe, its .new.exe, the downloaded zip, the temp copy used by the replacer."""
+    """exe, its .new.exe, the downloaded zip, the temp copy used by the replacer.
+    macOS: the bundle, TimeTracker.new.app, the downloaded dmg, the old bundle while swapping."""
+    if MAC:
+        app = bundle_path(exe)
+        base = os.path.splitext(app)[0]
+        return app, base + ".new.app", base + ".update.dmg", base + ".old.app"
     exe = exe or sys.executable
     base = os.path.splitext(exe)[0]
     return exe, base + ".new.exe", base + ".update.zip", exe + ".tmp"
+
+
+def _remove(path):
+    try:
+        if os.path.isdir(path) and not os.path.islink(path):
+            shutil.rmtree(path)
+        else:
+            os.remove(path)
+    except OSError:
+        pass
 
 
 def cleanup(downloads=True):
@@ -150,10 +186,7 @@ def cleanup(downloads=True):
     if downloads:
         paths += [new, archive]
     for path in paths:
-        try:
-            os.remove(path)
-        except OSError:
-            pass
+        _remove(path)
 
 
 def prepare(release, progress=None):
@@ -181,18 +214,64 @@ def prepare(release, progress=None):
             raise OSError("архив скачался не полностью")
         if digest.hexdigest() != release.sha256:
             raise OSError("архив повреждён (не совпала контрольная сумма)")
-        with zipfile.ZipFile(archive) as z:
-            names = [n for n in z.namelist() if n.lower().rsplit("/", 1)[-1] == "timetracker.exe"]
-            if not names:
-                raise OSError("в архиве нет TimeTracker.exe")
-            with z.open(names[0]) as src, open(new, "wb") as dst:
-                shutil.copyfileobj(src, dst)
+        if MAC:
+            _extract_app(archive, new)
+        else:
+            with zipfile.ZipFile(archive) as z:
+                names = [n for n in z.namelist() if n.lower().rsplit("/", 1)[-1] == "timetracker.exe"]
+                if not names:
+                    raise OSError("в архиве нет TimeTracker.exe")
+                with z.open(names[0]) as src, open(new, "wb") as dst:
+                    shutil.copyfileobj(src, dst)
     finally:
         try:
             os.remove(archive)
         except OSError:
             pass
     return new
+
+
+def _run(*args):
+    try:
+        subprocess.run(args, check=True, capture_output=True, timeout=120)
+    except (subprocess.SubprocessError, OSError) as exc:
+        raise OSError("не удалось распаковать обновление") from exc
+
+
+def _extract_app(dmg, new):
+    """macOS: TimeTracker.app from the dmg → TimeTracker.new.app (ditto keeps links and the signature)."""
+    mount = tempfile.mkdtemp(prefix="TimeTracker-update-")
+    try:
+        _run("hdiutil", "attach", "-nobrowse", "-readonly", "-noautoopen", "-mountpoint", mount, dmg)
+        try:
+            src = os.path.join(mount, "TimeTracker.app")
+            if not os.path.isdir(src):
+                raise OSError("в архиве нет TimeTracker.app")
+            _remove(new)
+            _run("ditto", src, new)
+        finally:
+            subprocess.run(["hdiutil", "detach", mount, "-force"], capture_output=True, timeout=60)
+    finally:
+        try:
+            os.rmdir(mount)
+        except OSError:
+            pass
+
+
+# macOS replacer: $1 bundle, $2 new bundle, $3 old-bundle path while swapping, $4 pid of the app.
+# Waits up to 60 s for the app to exit, swaps, opens the result; the old bundle comes back on failure.
+MAC_REPLACER = """
+i=0
+while kill -0 "$4" 2>/dev/null && [ $i -lt 600 ]; do sleep 0.1; i=$((i+1)); done
+rm -rf "$3"
+if mv "$1" "$3" && mv "$2" "$1"; then
+    rm -rf "$3"
+    open "$1" --args --updated
+else
+    [ -d "$1" ] || mv "$3" "$1"
+    open "$1" --args --update-failed
+fi
+"""
 
 
 def start(exe, *args):
@@ -207,6 +286,12 @@ def start(exe, *args):
 
 def launch_replacer(new):
     """Step 1 → 2: called by main.py after the app has quit and the database is closed."""
+    if MAC:
+        app, _new, _archive, old = _paths()
+        subprocess.Popen(["/bin/sh", "-c", MAC_REPLACER, "sh", app, new, old, str(os.getpid())],
+                         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                         close_fds=True, start_new_session=True)
+        return
     start(new, REPLACE_FLAG, sys.executable)
 
 
