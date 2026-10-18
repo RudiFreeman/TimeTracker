@@ -103,7 +103,10 @@ def main():
     app.setStyle("Fusion")
     app.setPalette(theme.palette())
     app.setStyleSheet(theme.stylesheet())
-    app.setWindowIcon(theme.app_icon())
+    if sys.platform != "darwin":
+        # macOS: the Dock shows this instead of the bundle's icon (Icon-mac.png on Apple's grid) —
+        # the icon jumped to a bigger one right after start. Mac windows have no icons anyway.
+        app.setWindowIcon(theme.app_icon())
     app.setQuitOnLastWindowClosed(False)  # the timer window decides when to quit
 
     after_update = updater.UPDATED_FLAG in sys.argv or updater.FAILED_FLAG in sys.argv

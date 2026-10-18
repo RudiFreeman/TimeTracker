@@ -14,3 +14,4 @@ release/v*/
 # Скриншоты ошибок из ручного QA
 tests/ErrorImage/
 .pytest_cache/
+.timetracker.lock

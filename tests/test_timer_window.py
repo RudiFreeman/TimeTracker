@@ -175,3 +175,43 @@ def test_click_row_sets_both_fields(window, db, pair):
     window._on_item_clicked(window.list.item(1))
     assert (window.product.currentText(), window.subtask.currentText()) == ("DAC 520SV", "Съемка")
     assert window.main_btn.text().strip() == "Продолжить"
+
+
+# --- Mac: выход по Cmd+Q / из Dock ------------------------------------------------------
+
+@pytest.fixture
+def mac_window(qapp, db, monkeypatch):
+    from timetracker import theme
+    monkeypatch.setattr(theme, "MAC", True)  # QuitGuard ставится только на Mac
+    w = TimerWindow(db, Hub())
+    yield w
+    w._ticker.stop()
+    w.deleteLater()
+
+
+@pytest.mark.parametrize("answer", [True, False])
+def test_mac_quit_request_pauses_hidden_timer(mac_window, db, pair, qapp, monkeypatch, answer):
+    """Cmd+Q при спрятанном окне таймера (мини-окно, строка меню): Qt закрывает только видимые окна —
+    таймер не вставал на паузу, при следующем запуске «закрылась некорректно» (Mac, 18.10.2026)."""
+    from PySide6.QtCore import QEvent
+    from timetracker import dialogs
+    asked = []
+    monkeypatch.setattr(dialogs, "ask", lambda *a, **k: asked.append(1) or answer)
+    db.start(*pair("Монтаж"))
+    mac_window.hide()
+    qapp.sendEvent(qapp, QEvent(QEvent.Quit))
+    assert asked  # идущий таймер — сначала спросить
+    assert bool(db.active_session()) is not answer  # «Да» — пауза, «Нет» — таймер идёт дальше
+
+
+def test_mac_minimize_keeps_window_in_dock(mac_window, qapp):
+    """Mac: свёрнутое окно остаётся в Dock (не прячется) — иначе клик по нему в Dock открывал пустую
+    рамку (18.10.2026). Развернули из Dock — мини-окно прячется."""
+    from PySide6.QtCore import Qt
+    mac_window.show()
+    mac_window.setWindowState(Qt.WindowMinimized)
+    qapp.processEvents()
+    assert mac_window.mini.isVisible() and mac_window.isVisible()
+    mac_window.setWindowState(Qt.WindowNoState)
+    qapp.processEvents()
+    assert not mac_window.mini.isVisible()

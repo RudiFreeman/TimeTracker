@@ -24,6 +24,27 @@ class Hub(QObject):
     changed = Signal()
 
 
+class QuitGuard(QObject):
+    """macOS: Cmd+Q, «Завершить» in the Dock and logging out send the app a Quit request. Qt
+    answers it by closing only the visible windows, so a timer hidden behind the mini window or
+    in the menu bar was never paused (next start: «закрылась некорректно»). Route the request
+    through the timer window's close instead: pause (asking first), save the fields, exit."""
+
+    def __init__(self, timer):
+        super().__init__(timer)
+        self.timer = timer
+        QApplication.instance().installEventFilter(self)
+
+    def eventFilter(self, obj, event):
+        if event.type() == QEvent.Quit and obj is QApplication.instance():
+            if self.timer.db.active_session() and (not self.timer.isVisible() or self.timer.isMinimized()):
+                self.timer.showNormal()  # closeEvent asks to confirm pausing a running timer
+                self.timer.raise_()
+            self.timer.close()
+            return True
+        return False
+
+
 class PickCombo(QComboBox):
     """Choose-only field: dimmed, no typing. A plain (non-editable) combo, so Qt itself handles
     click to open / click again to close / pick to close. Don't intercept its mouse events:
@@ -91,6 +112,8 @@ class TimerWindow(QWidget):
         self.mini = MiniWindow(self)
         self._ticker = QTimer(self, interval=1000, timeout=self._tick)
         self._ticker.start()
+        if theme.MAC and QApplication.instance():
+            self._quit_guard = QuitGuard(self)
 
     # --------------------------------------------------------------------- UI
 
@@ -684,15 +707,21 @@ class TimerWindow(QWidget):
     def showEvent(self, event):
         super().showEvent(event)
         theme.dark_title_bar(self)
-        if self.mini:
+        if self.mini and not self.isMinimized():  # macOS: a minimized window stays "shown" in the Dock
             self.mini.hide()  # full window is back (expand, tray, auto-pause notice)
 
     def changeEvent(self, event):
         super().changeEvent(event)
         # Minimize = swap to the compact always-on-top widget; the timer keeps running.
-        if event.type() == QEvent.WindowStateChange and self.isMinimized() and self.mini:
-            QTimer.singleShot(0, self.hide)
-            self.mini.show_mini()
+        if event.type() == QEvent.WindowStateChange and self.mini:
+            if self.isMinimized():
+                # macOS: the window stays minimized in the Dock. Hiding it there left a Dock
+                # thumbnail that brought back an empty frame Qt thought hidden (Mac, 18.10.2026).
+                if not theme.MAC:
+                    QTimer.singleShot(0, self.hide)
+                self.mini.show_mini()
+            elif theme.MAC and event.oldState() & Qt.WindowMinimized:
+                self.mini.hide()  # restored from the Dock
 
     def closeEvent(self, event):
         active = self.db.active_session()
@@ -708,4 +737,10 @@ class TimerWindow(QWidget):
         event.accept()
         if self.tray:
             self.tray.hide()
-        QApplication.quit()
+        if theme.MAC:
+            # quit() on macOS goes through NSApplication terminate:, which may call exit() right
+            # here, inside the event loop: C++ teardown then destroys windows Python still holds
+            # and the app crashes («неожиданно завершило работу»). exit() just ends app.exec().
+            QApplication.exit(0)
+        else:
+            QApplication.quit()

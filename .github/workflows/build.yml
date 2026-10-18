@@ -1,0 +1,109 @@
+# One push builds both versions: tests + TimeTracker-X.Y.Z.zip (Windows) and TimeTracker-X.Y.Z-mac.dmg (Mac).
+# A tag vX.Y.Z also makes a DRAFT GitHub Release with both files (tools/release_notes.py writes the text).
+# A draft is invisible to the programs' auto-update; it goes out only when published by hand after a check.
+name: Build
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install
+        run: python -m pip install -r requirements-dev.txt
+
+      - name: Tests
+        run: python -m pytest -q
+
+      - name: Build
+        shell: cmd
+        run: build.bat
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TimeTracker-windows
+          path: release/v*/*.zip
+          if-no-files-found: error
+
+  mac:
+    runs-on: macos-14   # Apple Silicon
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install
+        run: python -m pip install -r requirements-dev.txt pillow
+
+      - name: Tests
+        run: python -m pytest -q
+
+      - name: Build
+        run: PYTHON=python sh build_mac.sh
+
+      - name: Screenshots
+        run: python -X utf8 tests/screenshots.py screenshots
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TimeTracker-mac
+          path: release/v*/*.dmg
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: screenshots
+          path: screenshots/
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [windows, mac]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: TimeTracker-*
+          path: assets
+          merge-multiple: true
+
+      - name: Release notes
+        run: python -X utf8 tools/release_notes.py --tag "$TAG" > notes.md
+
+      - name: Draft release
+        run: |
+          VERSION="${TAG#v}"
+          FILES="$(find assets -name "TimeTracker-$VERSION.zip" -o -name "TimeTracker-$VERSION-mac.dmg")"
+          test "$(echo "$FILES" | wc -l)" -eq 2 || { echo "need exactly one .zip and one .dmg: $FILES"; exit 1; }
+          if gh release view "$TAG" --json isDraft -q .isDraft > draft.txt 2>/dev/null; then
+            # Re-run: refresh the draft. Never touch a published release - colleagues already have it.
+            test "$(cat draft.txt)" = "true" || { echo "$TAG is already published"; exit 1; }
+            gh release upload "$TAG" $FILES --clobber
+            gh release edit "$TAG" --notes-file notes.md
+          else
+            gh release create "$TAG" $FILES --draft --title "Time Tracker $VERSION" --notes-file notes.md
+          fi

@@ -3,6 +3,7 @@
 [![version](https://img.shields.io/github/v/release/RudiFreeman/TimeTracker?label=version&color=2ea043)](https://github.com/RudiFreeman/TimeTracker/releases/latest)
 [![downloads](https://img.shields.io/github/downloads/RudiFreeman/TimeTracker/total?label=downloads&color=2ea043)](https://github.com/RudiFreeman/TimeTracker/releases)
 ![platform](https://img.shields.io/badge/Windows-10%20%7C%2011-007ec6)
+![macos](https://img.shields.io/badge/macOS-Apple%20Silicon-007ec6)
 ![python](https://img.shields.io/badge/python-3.13-007ec6)
 ![pyside6](https://img.shields.io/badge/PySide6-6.12-007ec6)
 ![qt](https://img.shields.io/badge/Qt-LGPL%20v3-007ec6)
@@ -11,7 +12,7 @@
 ![pytest](https://img.shields.io/badge/pytest-tested-007ec6)
 [![license](https://img.shields.io/github/license/RudiFreeman/TimeTracker?color=007ec6)](LICENSE)
 
-Портативный трекер рабочего времени для Windows — один `.exe`, без установки. Таймер по задачам и подзадачам, журнал по дням с таймлайном, сводка с экспортом в Excel, учёт токенов AI-сервисов и защита от «забытого таймера». Все данные — в одном файле рядом с программой.
+Трекер рабочего времени для Windows (портативный `.exe`, без установки) и Mac (Apple Silicon). Таймер по задачам и подзадачам, журнал по дням с таймлайном, сводка с экспортом в Excel, учёт токенов AI-сервисов и защита от «забытого таймера». Все данные — в одном файле `timetracker.db`, его можно перенести между Windows и Mac.
 
 ---
 
@@ -31,9 +32,16 @@
 
 ## ⬇️ Установка
 
+**Windows**
+
 1. Скачайте `TimeTracker-….zip` со страницы [последнего релиза](https://github.com/RudiFreeman/TimeTracker/releases/latest).
 2. Распакуйте в любую папку с правом записи (например `C:\TimeTracker`), **не** в Program Files — рядом с программой создаётся база `timetracker.db`.
 3. Запустите `TimeTracker.exe`. Если Windows покажет «Система Windows защитила ваш компьютер» → «Подробнее» → «Выполнить в любом случае» (у программы нет цифровой подписи).
+
+**Mac** (M1 и новее)
+
+1. Скачайте `TimeTracker-…-mac.dmg` с той же страницы, откройте и перетащите TimeTracker в «Программы».
+2. В первый раз macOS не откроет программу (нет платной подписи Apple): «Системные настройки» → «Конфиденциальность и безопасность» → «Всё равно открыть». Данные — в `~/Library/Application Support/TimeTracker` («Настройки» → «Открыть папку»).
 
 **Обновление** — программа сама раз в день проверяет новую версию и обновляется одной кнопкой, данные сохраняются. Вручную: «О программе» → «Проверить обновления».
 
@@ -74,7 +82,8 @@ pip install -r requirements.txt
 python main.py
 ```
 
-- Сборка `.exe`: `build.bat` → `dist\TimeTracker.exe` и архив релиза в `release\`.
+- Сборка `.exe`: `build.bat` → `dist\TimeTracker.exe` и архив релиза в `release\`. Mac: `sh build_mac.sh` → `.dmg` в `release/`.
+- Обе версии собирает GitHub Actions при каждом push; тег `vX.Y.Z` — черновик релиза с `.zip` и `.dmg`.
 - Тесты: `pip install -r requirements-dev.txt`, затем `python -m pytest`.
 
 ## 📄 Лицензия

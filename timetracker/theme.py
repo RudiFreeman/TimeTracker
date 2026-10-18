@@ -6,7 +6,7 @@ import tempfile
 import zlib
 
 from PySide6.QtCore import QRect, Qt
-from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPalette, QPixmap
+from PySide6.QtGui import QColor, QFont, QGuiApplication, QIcon, QPainter, QPalette, QPixmap
 
 # ----------------------------------------------------------------- palette
 BG = "#202020"          # window background
@@ -282,7 +282,7 @@ def show_on_all_spaces(widget):
     """macOS: keep the window on every desktop (Space) and over full-screen apps. Call after show():
     the native NSWindow exists only then. Qt has no API for it, so NSWindow.setCollectionBehavior via
     the Objective-C runtime (no PyObjC in the build)."""
-    if not MAC:
+    if not MAC or QGuiApplication.platformName() != "cocoa":  # offscreen tests: winId() is no NSView
         return
     try:
         import ctypes.util
