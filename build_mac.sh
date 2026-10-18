@@ -7,10 +7,10 @@ PY=${PYTHON:-python3}
 $PY -m pip install --upgrade -r requirements.txt pyinstaller pillow
 VERSION=$($PY -c "from timetracker import __version__; print(__version__)")
 
-# Icon.png (1024x1024 with Apple-style margins) -> .icns by PyInstaller (needs pillow).
+# Icon-mac.png (Apple icon grid, made by tools/mac_icon.py from Icon.png) -> .icns by PyInstaller (needs pillow).
 # onedir .app: a onefile .app is deprecated by PyInstaller and slow to start.
 $PY -m PyInstaller --noconfirm --clean --windowed --name TimeTracker \
-    --icon Icon.png --osx-bundle-identifier com.rudifreeman.timetracker \
+    --icon Icon-mac.png --osx-bundle-identifier com.rudifreeman.timetracker \
     --add-data "timetracker/icon.png:timetracker" --add-data "timetracker/icons.ttf:timetracker" \
     --add-data "CHANGELOG.md:." \
     --exclude-module tkinter \

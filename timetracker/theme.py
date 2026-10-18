@@ -278,6 +278,28 @@ def palette():
     return pal
 
 
+def show_on_all_spaces(widget):
+    """macOS: keep the window on every desktop (Space) and over full-screen apps. Call after show():
+    the native NSWindow exists only then. Qt has no API for it, so NSWindow.setCollectionBehavior via
+    the Objective-C runtime (no PyObjC in the build)."""
+    if not MAC:
+        return
+    try:
+        import ctypes.util
+        objc = ctypes.cdll.LoadLibrary(ctypes.util.find_library("objc"))
+        objc.sel_registerName.restype = ctypes.c_void_p
+        objc.sel_registerName.argtypes = (ctypes.c_char_p,)
+        send = ctypes.cast(objc.objc_msgSend, ctypes.c_void_p).value
+        get = ctypes.CFUNCTYPE(ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p)(send)
+        put = ctypes.CFUNCTYPE(None, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_ulong)(send)
+        window = get(int(widget.winId()), objc.sel_registerName(b"window"))  # winId() is the NSView
+        if window:
+            can_join_all_spaces, full_screen_auxiliary = 1 << 0, 1 << 8
+            put(window, objc.sel_registerName(b"setCollectionBehavior:"), can_join_all_spaces | full_screen_auxiliary)
+    except (AttributeError, OSError, TypeError):
+        pass
+
+
 def dark_title_bar(widget):
     """Ask Windows 10 (1809+) / 11 to draw a dark title bar for this window."""
     if sys.platform != "win32":

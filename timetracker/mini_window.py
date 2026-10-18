@@ -123,6 +123,7 @@ class MiniWindow(QWidget):
     def show_mini(self):
         self._restore_position()
         self.show()
+        theme.show_on_all_spaces(self)  # macOS: don't stay behind on the desktop it was opened on
         self.raise_()
         self.sync()
 

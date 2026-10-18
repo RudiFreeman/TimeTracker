@@ -15,6 +15,7 @@ from timetracker.timer_window import APP_TITLE, Hub, TimerWindow
 from timetracker.tray import Tray
 
 _mutex = []  # keep the single-instance handle alive for the process lifetime
+_crash_log = []  # macOS: file faulthandler writes to (log_crashes)
 
 
 def _acquire_lock_file():
@@ -76,7 +77,21 @@ def run_replacer(target):
     return 0
 
 
+def log_crashes():
+    """macOS: a crash of the built app leaves only a system report without Python frames — write them
+    to crash.log in the data folder (faulthandler). Kept open for the whole run."""
+    if sys.platform == "darwin" and getattr(sys, "frozen", False):
+        import faulthandler
+        import os
+        try:
+            _crash_log.append(open(os.path.join(app_dir(), "crash.log"), "a", encoding="utf-8"))
+            faulthandler.enable(_crash_log[0], all_threads=True)
+        except OSError:
+            pass
+
+
 def main():
+    log_crashes()
     if updater.REPLACE_FLAG in sys.argv[:-1]:
         return run_replacer(sys.argv[sys.argv.index(updater.REPLACE_FLAG) + 1])
     app = QApplication(sys.argv)

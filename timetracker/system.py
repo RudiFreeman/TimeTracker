@@ -47,7 +47,10 @@ def set_autostart(enabled):
         if enabled:
             os.makedirs(os.path.dirname(path), exist_ok=True)
             with open(path, "wb") as f:
-                plistlib.dump({"Label": AGENT_LABEL, "ProgramArguments": [sys.executable], "RunAtLoad": True}, f)
+                # AssociatedBundleIdentifiers: System Settings shows the app's name and icon for it
+                # instead of an anonymous background item.
+                plistlib.dump({"Label": AGENT_LABEL, "ProgramArguments": [sys.executable], "RunAtLoad": True,
+                               "AssociatedBundleIdentifiers": [AGENT_LABEL]}, f)
         else:
             try:
                 os.remove(path)
