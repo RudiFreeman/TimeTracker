@@ -33,6 +33,8 @@ def test_license_file_exists():
 def test_feedback_form(monkeypatch):
     """«Обратная связь» открывает Google Форму автора; если в форме есть вопрос о версии — версия подставлена."""
     from timetracker import __version__
+    assert about_page.FEEDBACK_VERSION_FIELD  # форма доделана — версия подставляется
+    monkeypatch.setattr(about_page, "FEEDBACK_VERSION_FIELD", None)
     assert about_page.feedback_url() == about_page.FEEDBACK_URL
     assert about_page.FEEDBACK_URL.startswith("https://docs.google.com/forms/")
     monkeypatch.setattr(about_page, "FEEDBACK_VERSION_FIELD", "entry.123")

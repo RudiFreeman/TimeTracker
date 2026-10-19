@@ -16,7 +16,7 @@ REPO_URL = "https://github.com/RudiFreeman/TimeTracker"
 # Google Form of the author: bugs and ideas. Opens in the browser — the program itself sends nothing.
 FEEDBACK_URL = "https://docs.google.com/forms/d/e/1FAIpQLSdXuzbhMWoMrutEENDCZNALxK_syX_CKRDTYHOPGBzejPS1RA/viewform"
 # "entry.<id>" of the form's «Версия программы» question: filled in for the user. None — the form has none yet.
-FEEDBACK_VERSION_FIELD = None
+FEEDBACK_VERSION_FIELD = "entry.75139511"
 LICENSE_TEXT = (f'Бесплатная программа с открытым кодом, лицензия MIT · <a href="{REPO_URL}">исходный код на GitHub</a>. '
                 'Qt / PySide6 — под лицензией <a href="https://www.qt.io/qt-for-python">LGPL v3</a>.')
 PRIVACY_TEXT = ("Ваши данные никуда не отправляются: всё хранится в файле timetracker.db "
