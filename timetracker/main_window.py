@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
 
 from . import db as dbm
 from . import dialogs, edit_dialogs, reporting, system, theme
+from . import about_page
 from .about_page import AboutPage
 from .delegates import DATA, Box, JournalDelegate, payload
 
@@ -83,6 +84,10 @@ class MainWindow(QWidget):
                             (theme.G_INFO, "О программе")):
             self.nav.addItem(QListWidgetItem(theme.glyph_icon(glyph), "  " + text))
         side.addWidget(self.nav, 1)
+        feedback_btn = QPushButton(" Обратная связь", objectName="flat", icon=theme.glyph_icon(theme.G_EDIT),
+                                   toolTip="Нашли ошибку или есть идея — напишите автору (форма в браузере)")
+        feedback_btn.clicked.connect(about_page.open_feedback)
+        side.addWidget(feedback_btn, 0, Qt.AlignLeft)
         timer_btn = QPushButton(" Окно таймера", objectName="flat", icon=theme.glyph_icon(theme.G_PLAY))
         timer_btn.clicked.connect(lambda: (timer.showNormal(), timer.raise_(), timer.activateWindow()))
         side.addWidget(timer_btn, 0, Qt.AlignLeft)
@@ -287,7 +292,7 @@ class JournalPage(QWidget):
     def _delete(self, entry):
         if dialogs.ask(self, "Удалить сессию",
                        f"Удалить сессию «{entry['product']} · {entry['subtask']}» целиком (все дни)?\nЭто нельзя отменить.",
-                       warning=True):
+                       warning=True, default_no=True):
             self.db.delete_session(entry["session_id"])
             self.hub.changed.emit()
 
@@ -665,21 +670,38 @@ class SettingsPage(QWidget):
         box.addWidget(self.limit_enabled)
         layout.addWidget(frame)
 
-        frame, box = card("Подзадачи", "Удалить можно только подзадачу, по которой ещё нет сессий.")
+        frame, box = card("Подзадачи",
+                          "Переименование меняет название везде — в журнале, сводке и окне таймера. "
+                          "Переименуете в уже существующую — время объединится в ней. "
+                          "Удалить можно только подзадачу, по которой ещё нет сессий.")
         self.subtasks = QListWidget(objectName="plain")
         self.subtasks.setFixedHeight(150)
+        self.subtasks.itemDoubleClicked.connect(lambda _: self._rename_subtask())
         box.addWidget(self.subtasks)
         row = QHBoxLayout()
         self.new_subtask = QLineEdit(placeholderText="Новая подзадача")
         self.new_subtask.returnPressed.connect(self._add_subtask)
         add = QPushButton(" Добавить", icon=theme.glyph_icon(theme.G_ADD))
         add.clicked.connect(self._add_subtask)
+        rename = QPushButton(" Переименовать", icon=theme.glyph_icon(theme.G_EDIT))
+        rename.clicked.connect(self._rename_subtask)
         delete = QPushButton(" Удалить выбранную", icon=theme.glyph_icon(theme.G_DELETE))
         delete.clicked.connect(self._delete_subtask)
         row.addWidget(self.new_subtask, 1)
         row.addWidget(add)
+        row.addWidget(rename)
         row.addWidget(delete)
         box.addLayout(row)
+        layout.addWidget(frame)
+
+        frame, box = card("Окно таймера",
+                          "Выключено — окно таймера сворачивается как обычное окно, "
+                          f"{'в Dock' if theme.MAC else 'на панель задач'}.")
+        self.mini_on_minimize = QCheckBox("Показывать компактный таймер при сворачивании",
+                                          checked=self.db.get_setting("mini_on_minimize") != "0")
+        self.mini_on_minimize.toggled.connect(
+            lambda on: self.db.set_setting("mini_on_minimize", "1" if on else "0"))
+        box.addWidget(self.mini_on_minimize)
         layout.addWidget(frame)
 
         frame, box = card("Запуск")
@@ -759,6 +781,31 @@ class SettingsPage(QWidget):
             return
         self.db.create_subtask(name)
         self.new_subtask.clear()
+        self.hub.changed.emit()
+
+    def _rename_subtask(self):
+        item = self.subtasks.currentItem()
+        if not item:
+            return
+        name = item.text()
+        subtask_id = self.db.find_subtask(name)
+        if name.casefold() == dbm.DEFAULT_SUBTASK.casefold():
+            dialogs.error(self, "Нельзя переименовать", f"«{name}» — служебная подзадача, её нельзя переименовать.")
+            return
+        new_name = dialogs.ask_text(self, "Переименовать", "Новое название подзадачи:", name)
+        if not new_name or new_name == name:
+            return
+        try:
+            self.db.rename_subtask(subtask_id, new_name)
+        except ValueError:
+            target = self.db.find_subtask(new_name)
+            new_name = next(n for n in self.db.subtask_names() if n.casefold() == new_name.casefold())
+            if not dialogs.ask(self, "Объединить подзадачи",
+                               f"Подзадача «{new_name}» уже есть.\nПеренести в неё всё время «{name}»?\n\n"
+                               f"«{name}» исчезнет из списка, время останется — в «{new_name}»."):
+                return
+            self.db.merge_subtasks(subtask_id, target)
+        self.hub.subtask_renamed.emit(name, new_name)
         self.hub.changed.emit()
 
     def _delete_subtask(self):

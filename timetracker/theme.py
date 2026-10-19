@@ -155,7 +155,12 @@ def dot_icon(color, size=10):
 
 def _asset_dir():
     """PNG glyphs referenced from the stylesheet (QSS needs files)."""
-    folder = os.path.join(tempfile.gettempdir(), "portable_time_tracker_assets")
+    name = "portable_time_tracker_assets"
+    if QGuiApplication.platformName() == "offscreen":
+        # Tests: no system fonts, the glyphs come out blank. Own folder, or they would overwrite
+        # the files a running program reads its checkmark and arrows from.
+        name += "_offscreen"
+    folder = os.path.join(tempfile.gettempdir(), name)
     os.makedirs(folder, exist_ok=True)
     for name, glyph, color, size in (
         ("down", G_DOWN, TEXT_2, 10), ("up", G_UP, TEXT_2, 10), ("right", G_RIGHT, TEXT_2, 10),

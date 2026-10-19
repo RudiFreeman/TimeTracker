@@ -17,9 +17,10 @@ DB_FILENAME = "timetracker.db"
 BACKUP_DIR = "backups"
 BACKUP_KEEP = 14
 DEFAULT_SUBTASK = "Without task"
-DEFAULT_SUBTASKS = [DEFAULT_SUBTASK, "Отбор материала", "Черновая сборка", "Написание текста", "Перевод"]
+# A new base starts with no products and only this subtask: everyone names their own kinds of work.
+DEFAULT_SUBTASKS = [DEFAULT_SUBTASK]
 DEFAULT_SETTINGS = {"limit_enabled": "1", "limit_time": "18:00", "day_start": "09:00", "topmost": "1", "position": "",
-                    "last_product": "", "last_subtask": ""}
+                    "last_product": "", "last_subtask": "", "mini_on_minimize": "1"}
 END_OF_DAY = dtime(23, 59, 59)
 
 SCHEMA = """
@@ -318,6 +319,39 @@ class Database:
             subtask_id = cur.lastrowid
         return subtask_id
 
+    def rename_subtask(self, subtask_id, new_name):
+        """Rename everywhere (sessions keep the id). Raises ValueError("exists") if another subtask
+        has that name, or ValueError(text) for the service «Without task»."""
+        self._check_not_default(subtask_id)
+        other = self.find_subtask(new_name)
+        if other is not None and other != subtask_id:
+            raise ValueError("exists")
+        old = self._subtask_name(subtask_id)
+        with self.conn:
+            self.conn.execute("UPDATE subtasks SET name = ? WHERE id = ?", (new_name.strip(), subtask_id))
+            self._follow_last_subtask(old, new_name.strip())
+
+    def merge_subtasks(self, source_id, target_id):
+        """Move all sessions of `source_id` to `target_id` and delete the source (a typo fixed by
+        renaming into an existing subtask)."""
+        self._check_not_default(source_id)
+        old, new = self._subtask_name(source_id), self._subtask_name(target_id)
+        with self.conn:
+            self.conn.execute("UPDATE sessions SET subtask_id = ? WHERE subtask_id = ?", (target_id, source_id))
+            self.conn.execute("DELETE FROM subtasks WHERE id = ?", (source_id,))
+            self._follow_last_subtask(old, new)
+
+    def _subtask_name(self, subtask_id):
+        return self.conn.execute("SELECT name FROM subtasks WHERE id = ?", (subtask_id,)).fetchone()["name"]
+
+    def _check_not_default(self, subtask_id):
+        if self._subtask_name(subtask_id).casefold() == DEFAULT_SUBTASK.casefold():
+            raise ValueError(f"«{DEFAULT_SUBTASK}» — служебная подзадача, её нельзя переименовать.")
+
+    def _follow_last_subtask(self, old, new):
+        """The timer window restores its fields at start by name."""
+        self.conn.execute("UPDATE settings SET value = ? WHERE key = 'last_subtask' AND value = ?", (new, old))
+
     def delete_subtask(self, name):
         """Delete an unused custom subtask; raises ValueError explaining why not."""
         subtask_id = self.find_subtask(name)
@@ -326,7 +360,8 @@ class Database:
         if name.strip().casefold() == DEFAULT_SUBTASK.casefold():
             raise ValueError(f"«{DEFAULT_SUBTASK}» — служебная подзадача, её нельзя удалить.")
         if self.conn.execute("SELECT 1 FROM sessions WHERE subtask_id = ? LIMIT 1", (subtask_id,)).fetchone():
-            raise ValueError(f"По подзадаче «{name}» уже есть сессии — её нельзя удалить.")
+            raise ValueError(f"По подзадаче «{name}» уже есть сессии — её нельзя удалить.\n"
+                             "Чтобы убрать её, переименуйте в другую существующую подзадачу — время объединится.")
         with self.conn:
             self.conn.execute("DELETE FROM subtasks WHERE id = ?", (subtask_id,))
 
@@ -534,6 +569,17 @@ class Database:
     def delete_session(self, session_id):
         with self.conn:
             self.conn.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
+
+    def delete_pair(self, product_id, subtask_id):
+        """All time of a subtask within one product (every session, every day). The subtask's name
+        goes too, unless another product uses it or it is the service «Without task»."""
+        with self.conn:
+            self.conn.execute("DELETE FROM sessions WHERE product_id = ? AND subtask_id = ?", (product_id, subtask_id))
+            self.conn.execute(
+                "DELETE FROM subtasks WHERE id = ? AND name != ? "
+                "AND NOT EXISTS (SELECT 1 FROM sessions WHERE subtask_id = ?)",
+                (subtask_id, DEFAULT_SUBTASK, subtask_id),
+            )
 
     # ------------------------------------------------------------- manual edits
 

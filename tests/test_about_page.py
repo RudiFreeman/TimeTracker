@@ -28,3 +28,13 @@ def test_license_file_exists():
     assert text.startswith("MIT License") and text.rstrip().endswith("SOFTWARE.")
     with open(os.path.join(root, "THIRD_PARTY_NOTICES.md"), encoding="utf-8") as f:
         assert "LGPL" in f.read()
+
+
+def test_feedback_form(monkeypatch):
+    """«Обратная связь» открывает Google Форму автора; если в форме есть вопрос о версии — версия подставлена."""
+    from timetracker import __version__
+    assert about_page.feedback_url() == about_page.FEEDBACK_URL
+    assert about_page.FEEDBACK_URL.startswith("https://docs.google.com/forms/")
+    monkeypatch.setattr(about_page, "FEEDBACK_VERSION_FIELD", "entry.123")
+    url = about_page.feedback_url()
+    assert "usp=pp_url" in url and "entry.123=Time%20Tracker%20" + __version__ in url

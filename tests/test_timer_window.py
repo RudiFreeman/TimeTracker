@@ -132,6 +132,7 @@ def test_list_headers_not_selectable(window, db, pair):
 def test_click_header_sets_only_task(window, db, pair):
     db.start(*pair("DAC 520SV", "Съемка"), at=at(10))
     db.pause_active(at=at(11))
+    db.create_subtask("Перевод")
     window.reload()
     window._set_text(window.product, "")
     window._set_text(window.subtask, "Перевод")
@@ -215,3 +216,60 @@ def test_mac_minimize_keeps_window_in_dock(mac_window, qapp):
     mac_window.setWindowState(Qt.WindowNoState)
     qapp.processEvents()
     assert not mac_window.mini.isVisible()
+
+
+def test_offscreen_assets_do_not_overwrite_running_program(qapp):
+    """Offscreen tests draw blank glyphs: written to the shared temp folder, they replaced the
+    checkmark of a program running at the same time (empty checked box in Settings)."""
+    from timetracker import theme
+    assert theme._asset_dir().endswith("portable_time_tracker_assets_offscreen")
+
+
+def test_subtask_field_follows_rename(window, db, pair):
+    """Переименовали подзадачу в Настройках — поле в окне таймера не пустеет, а берёт новое имя."""
+    p, s = pair("A", "Мотнаж")
+    window.reload()
+    window._set_text(window.subtask, "Мотнаж")
+    db.rename_subtask(s, "Монтаж")
+    window.hub.subtask_renamed.emit("Мотнаж", "Монтаж")
+    window.hub.changed.emit()
+    assert window.subtask.currentText() == "Монтаж"
+
+
+def test_delete_pair_from_list_asks_first(window, db, pair, monkeypatch):
+    """ПКМ по подзадаче → «Удалить подзадачу…»: без «Да» ничего не удаляется; Enter = «Нет»."""
+    from timetracker import dialogs
+    p, s = pair("A", "Монтаж")
+    db.start(p, s, at=at(10)); db.pause_active(at=at(11))
+    window.reload()
+    row = next(r for r in [payload(window.list.model().index(i, 0)) for i in range(window.list.count())]
+               if r.get("kind") != "group")
+    asked = {}
+    def ask(parent, title, text, warning=False, default_no=False):
+        asked.update(text=text, default_no=default_no)
+        return False
+    monkeypatch.setattr(dialogs, "ask", ask)
+    window.delete_pair(row)
+    assert asked["default_no"] and "1 ч" in asked["text"]
+    assert db.work_sessions(at=at(12))
+    monkeypatch.setattr(dialogs, "ask", lambda *a, **k: True)
+    window.delete_pair(row)
+    assert not db.work_sessions(at=at(12))
+
+
+@pytest.mark.parametrize("on", [True, False])
+def test_minimize_mini_window_setting(window, db, qapp, on):
+    """Настройки → «Показывать компактный таймер при сворачивании»: выключено — обычное сворачивание
+    (окно на панели задач, мини-окна нет)."""
+    db.set_setting("mini_on_minimize", "1" if on else "0")
+    window.show()
+    window.setWindowState(Qt.WindowMinimized)
+    qapp.processEvents()
+    assert window.mini.isVisible() is on
+    window.mini.hide()
+
+
+def test_pick_list_shows_five_rows_with_scroll(window):
+    """Длинный список задач/подзадач: видно 5 пунктов, дальше — прокрутка (полоса видна)."""
+    assert window.product.maxVisibleItems() == 5 and window.subtask.maxVisibleItems() == 5
+    assert window.subtask.view().verticalScrollBarPolicy() == Qt.ScrollBarAsNeeded

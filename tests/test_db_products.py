@@ -21,8 +21,64 @@ def test_product_names_recent_first(db, pair):
     assert db.product_names()[:2] == ["B", "A"]
 
 
-def test_default_subtasks_created(db):
-    assert db.subtask_names()[0] == "Without task"
+def test_new_base_is_empty(db):
+    """Новая база: ни задач, ни готовых подзадач — только служебная «Without task» (2.4.1)."""
+    assert db.subtask_names() == ["Without task"]
+    assert db.product_names(include_archived=True) == []
+
+
+def test_rename_subtask_everywhere(db, pair):
+    """Опечатку в подзадаче исправляют переименованием: сессии те же, имя новое везде."""
+    p, s = pair("A", "Мотнаж")
+    sid = db.start(p, s, at=at(10))
+    db.set_setting("last_subtask", "Мотнаж")
+    db.rename_subtask(s, "Монтаж")
+    assert db.find_subtask("Монтаж") == s and db.find_subtask("Мотнаж") is None
+    assert db.active_session()["id"] == sid and db.active_session()["subtask"] == "Монтаж"
+    assert db.get_setting("last_subtask") == "Монтаж"
+    db.rename_subtask(s, "монтаж")  # только регистр — не «уже есть»
+    assert db.subtask_names()[-1] == "монтаж"
+
+
+def test_rename_subtask_into_existing_merges(db, pair):
+    p, typo = pair("A", "Мотнаж")
+    db.start(p, typo, at=at(10))
+    db.pause_active(at=at(11))
+    right = db.create_subtask("Монтаж")
+    with pytest.raises(ValueError):
+        db.rename_subtask(typo, "МОНТАЖ")
+    db.merge_subtasks(typo, right)
+    assert db.find_subtask("Мотнаж") is None
+    assert db.work_sessions(at=at(12))[0]["subtask"] == "Монтаж"
+    assert db.work_sessions(at=at(12))[0]["pair_total"] == 3600
+
+
+def test_delete_pair_removes_all_its_time(db, pair):
+    """ПКМ «Удалить подзадачу» в окне таймера: всё время пары (все сессии) уходит; другие пары
+    и та же подзадача в другой задаче — остаются; имя подзадачи остаётся, только пока где-то используется."""
+    a, s = pair("A", "Монтаж")
+    b, _ = pair("B", "Монтаж")
+    _, other = pair("A", "Титры")
+    db.start(a, s, at=at(9)); db.stop(db.active_session()["id"], at=at(10))
+    db.start(a, s, at=at(11))  # вторая сессия той же пары, идёт
+    db.start(b, s, at=at(12)); db.start(a, other, at=at(13)); db.pause_active(at=at(14))
+    db.delete_pair(a, s)
+    pairs = {(r["product"], r["subtask"]) for r in db.work_sessions(at=at(15))}
+    assert pairs == {("B", "Монтаж"), ("A", "Титры")}
+    assert db.find_subtask("Монтаж") == s  # ещё есть в задаче B
+    db.delete_pair(b, s)
+    assert db.find_subtask("Монтаж") is None
+    default = db.find_subtask("Without task")
+    db.start(a, default, at=at(15)); db.delete_pair(a, default)
+    assert db.find_subtask("Without task") == default
+
+
+def test_without_task_cannot_be_renamed(db):
+    default = db.find_subtask("Without task")
+    with pytest.raises(ValueError):
+        db.rename_subtask(default, "Другое")
+    with pytest.raises(ValueError):
+        db.merge_subtasks(default, db.create_subtask("Другое"))
 
 
 def test_create_subtask_reuses_existing(db):

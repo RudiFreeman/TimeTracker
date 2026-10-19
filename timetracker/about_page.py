@@ -2,15 +2,21 @@
 import os
 import platform
 import sys
+from urllib.parse import quote
 
 from PySide6 import __version__ as pyside_version
-from PySide6.QtCore import QSize, Qt
+from PySide6.QtCore import QSize, Qt, QUrl
+from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import QApplication, QHBoxLayout, QLabel, QPushButton, QTextBrowser, QVBoxLayout, QWidget
 
 from . import __version__, theme, update_dialog
 
 AUTHOR = "Алексей Рудович"
 REPO_URL = "https://github.com/RudiFreeman/TimeTracker"
+# Google Form of the author: bugs and ideas. Opens in the browser — the program itself sends nothing.
+FEEDBACK_URL = "https://docs.google.com/forms/d/e/1FAIpQLSdXuzbhMWoMrutEENDCZNALxK_syX_CKRDTYHOPGBzejPS1RA/viewform"
+# "entry.<id>" of the form's «Версия программы» question: filled in for the user. None — the form has none yet.
+FEEDBACK_VERSION_FIELD = None
 LICENSE_TEXT = (f'Бесплатная программа с открытым кодом, лицензия MIT · <a href="{REPO_URL}">исходный код на GitHub</a>. '
                 'Qt / PySide6 — под лицензией <a href="https://www.qt.io/qt-for-python">LGPL v3</a>.')
 PRIVACY_TEXT = ("Ваши данные никуда не отправляются: всё хранится в файле timetracker.db "
@@ -20,6 +26,17 @@ DESCRIPTION = ("Портативный трекер рабочего време�
                "и подзадачам, журнал по дням, сводка по задачам и учёт токенов AI-сервисов.")
 # CHANGELOG.md лежит в корне проекта; в exe build.bat кладёт его в корень сборки — путь тот же.
 CHANGELOG = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "CHANGELOG.md")
+
+
+def feedback_url():
+    if not FEEDBACK_VERSION_FIELD:
+        return FEEDBACK_URL
+    version = f"Time Tracker {__version__} ({'Mac' if theme.MAC else 'Windows'})"
+    return f"{FEEDBACK_URL}?usp=pp_url&{FEEDBACK_VERSION_FIELD}={quote(version)}"
+
+
+def open_feedback():
+    QDesktopServices.openUrl(QUrl(feedback_url()))
 
 
 def changelog_markdown():
@@ -75,6 +92,9 @@ class AboutPage(QWidget):
         copy = QPushButton("Скопировать версию")
         copy.clicked.connect(lambda: QApplication.clipboard().setText(f"Time Tracker {__version__}"))
         row.addWidget(copy)
+        feedback = QPushButton("Обратная связь", toolTip="Нашли ошибку или есть идея — напишите автору")
+        feedback.clicked.connect(open_feedback)
+        row.addWidget(feedback)
         self.update_btn = QPushButton(objectName="accent")
         self.update_btn.clicked.connect(self._on_update)
         row.addWidget(self.update_btn)

@@ -26,9 +26,11 @@ def _box(parent, icon, title, text, buttons, default=None):
     return box
 
 
-def ask(parent, title, text, warning=False):
+def ask(parent, title, text, warning=False, default_no=False):
+    """default_no: Enter answers «Нет» — for questions that delete data."""
     icon = QMessageBox.Warning if warning else QMessageBox.Question
-    box = _box(parent, icon, title, text, QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes)
+    box = _box(parent, icon, title, text, QMessageBox.Yes | QMessageBox.No,
+               QMessageBox.No if default_no else QMessageBox.Yes)
     return box.exec() == QMessageBox.Yes
 
 

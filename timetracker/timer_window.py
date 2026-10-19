@@ -22,6 +22,7 @@ HEARTBEAT_EVERY = 15   # seconds between crash-recovery heartbeats
 class Hub(QObject):
     """Data changed somewhere — every window refreshes."""
     changed = Signal()
+    subtask_renamed = Signal(str, str)  # old, new — fields showing the old name follow it
 
 
 class QuitGuard(QObject):
@@ -51,7 +52,9 @@ class PickCombo(QComboBox):
     an earlier version opened the list on press and the release closed it again."""
 
     def __init__(self, placeholder):
-        super().__init__(maxVisibleItems=12, objectName="pick")
+        # 5 rows and a visible scroll bar: with a long list it wasn't clear there was more below.
+        super().__init__(maxVisibleItems=5, objectName="pick")
+        self.view().setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         self.setPlaceholderText(placeholder)
         self.setFocusPolicy(Qt.NoFocus)
 
@@ -61,6 +64,15 @@ class PickCombo(QComboBox):
         key = (text or "").strip().casefold()
         self.setCurrentIndex(next((i for i in range(self.count()) if self.itemText(i).casefold() == key), -1)
                              if key else -1)
+
+    def showPopup(self):
+        super().showPopup()
+        # Qt sizes the list without the stylesheet's row height, cutting the last visible row.
+        view, popup = self.view(), self.view().window()
+        rows = min(self.count(), self.maxVisibleItems())
+        if rows:
+            extra = popup.height() - view.viewport().height()  # borders and padding around the rows
+            popup.resize(popup.width(), view.sizeHintForRow(0) * rows + extra)
 
     def wheelEvent(self, event):
         event.ignore()  # the wheel must not silently switch the task; let the window scroll instead
@@ -104,6 +116,7 @@ class TimerWindow(QWidget):
         self._restore_position()
 
         self.hub.changed.connect(self.reload)
+        self.hub.subtask_renamed.connect(self._on_subtask_renamed)
         self._status_timer = QTimer(self, singleShot=True, interval=10000, timeout=self.status.hide)
         if self.db.recover():
             self._flash("Таймер с прошлого запуска поставлен на паузу (программа закрылась некорректно).", warn=True)
@@ -416,7 +429,22 @@ class TimerWindow(QWidget):
                        lambda: self.main_window.show_product(1, s["product"]))
         menu.addAction(theme.glyph_icon(theme.G_CLOCK), "Журнал по задаче",
                        lambda: self.main_window.show_product(0, s["product"]))
+        if s.get("kind") != "group":
+            menu.addSeparator()
+            menu.addAction(theme.glyph_icon(theme.G_DELETE), "Удалить подзадачу…", lambda: self.delete_pair(s))
         menu.exec(self.list.viewport().mapToGlobal(pos))
+
+    def delete_pair(self, s):
+        """Delete the subtask from this product with all its time (every session, every day)."""
+        running = "\nОна сейчас идёт — таймер остановится.\n" if s["status"] == "active" else ""
+        text = (f"Удалить подзадачу «{s['subtask']}» из задачи «{s['product']}» вместе со всем временем?\n\n"
+                f"Пропадёт {theme.fmt_human(s['pair_total'])} за все дни — "
+                f"из журнала и сводки.{running}\nЭто нельзя отменить.")
+        if not dialogs.ask(self, "Удалить подзадачу", text, warning=True, default_no=True):
+            return
+        self.db.delete_pair(s["product_id"], s["subtask_id"])
+        self._flash(f"Удалено: {s['product']} · {s['subtask']}")
+        self.hub.changed.emit()
 
     def _continue(self, s):
         self.continue_task(s["id"], s["product_id"], s["subtask_id"], s["status"])
@@ -440,6 +468,12 @@ class TimerWindow(QWidget):
         if not self.subtask.currentText():
             self._set_text(self.subtask, dbm.DEFAULT_SUBTASK)
         self.refresh()
+
+    def _on_subtask_renamed(self, old, new):
+        """Renamed in Settings: the field keeps the subtask under its new name instead of going blank."""
+        if self.subtask.currentText().casefold() == old.casefold():
+            self._fill(self.subtask, self.db.subtask_names())
+            self._set_text(self.subtask, new)
 
     def refresh(self):
         at = dbm.now()
@@ -713,7 +747,9 @@ class TimerWindow(QWidget):
     def changeEvent(self, event):
         super().changeEvent(event)
         # Minimize = swap to the compact always-on-top widget; the timer keeps running.
-        if event.type() == QEvent.WindowStateChange and self.mini:
+        # Settings can turn it off: then minimize is the ordinary one (taskbar / Dock).
+        if (event.type() == QEvent.WindowStateChange and self.mini
+                and self.db.get_setting("mini_on_minimize") != "0"):
             if self.isMinimized():
                 # macOS: the window stays minimized in the Dock. Hiding it there left a Dock
                 # thumbnail that brought back an empty frame Qt thought hidden (Mac, 18.10.2026).
