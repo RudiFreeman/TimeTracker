@@ -22,7 +22,7 @@ def test_product_names_recent_first(db, pair):
 
 
 def test_new_base_is_empty(db):
-    """Новая база: ни задач, ни готовых подзадач — только служебная «Without task» (2.4.1)."""
+    """Новая база: ни задач, ни готовых подзадач — только служебная «Without task» (2.5.0)."""
     assert db.subtask_names() == ["Without task"]
     assert db.product_names(include_archived=True) == []
 
